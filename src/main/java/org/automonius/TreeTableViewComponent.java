@@ -1,16 +1,9 @@
 package org.automonius;
 
 import javafx.beans.property.SimpleStringProperty;
-import javafx.scene.control.Alert;
-import javafx.scene.control.Alert.AlertType;
-import javafx.scene.control.ButtonType;
-import javafx.scene.control.TreeItem;
-import javafx.scene.control.TreeTableColumn;
-import javafx.scene.control.TreeTableView;
-import javafx.scene.layout.VBox;
-import javafx.scene.control.Button;
-import javafx.scene.control.TableView;
 import javafx.collections.ObservableList;
+import javafx.scene.control.*;
+import javafx.scene.layout.VBox;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -19,7 +12,6 @@ public class TreeTableViewComponent {
 
     private TreeItem<String> rootItem;
     private TreeTableView<String> treeTableView;
-    private int tableViewCounter = 2;  // Counter to keep track of TableView numbering, starting from 2
     private final Map<String, TableView<ObservableList<String>>> tableViewMap = new HashMap<>();
     private final TableViewComponent tableViewComponent;
     private final VBox mainContainer;
@@ -34,25 +26,22 @@ public class TreeTableViewComponent {
         defaultDirectory.getChildren().add(defaultTableView);
         rootItem.getChildren().add(defaultDirectory);
 
-        // Add the default TableView to the map
         TableView<ObservableList<String>> defaultTableViewInstance = tableViewComponent.createNewTableView("TableView1");
         tableViewMap.put("TableView1", defaultTableViewInstance);
 
         if (loadProject) {
-            // Load existing project data into the tree
             TreeItem<String> existingDirectory = new TreeItem<>("Loaded Directory");
             TreeItem<String> tableViewItem = new TreeItem<>("Loaded TableView");
             existingDirectory.getChildren().add(tableViewItem);
             rootItem.getChildren().add(existingDirectory);
 
-            // Add the loaded TableView to the map
             TableView<ObservableList<String>> loadedTableViewInstance = tableViewComponent.createNewTableView("Loaded TableView");
             tableViewMap.put("Loaded TableView", loadedTableViewInstance);
         }
 
         rootItem.setExpanded(true);
         treeTableView = new TreeTableView<>(rootItem);
-        treeTableView.setShowRoot(false);  // Hide the root item itself
+        treeTableView.setShowRoot(false);
 
         TreeTableColumn<String, String> column = new TreeTableColumn<>("Directory Structure");
         column.setCellValueFactory(param -> new SimpleStringProperty(param.getValue().getValue()));
@@ -84,10 +73,6 @@ public class TreeTableViewComponent {
         return vBox;
     }
 
-    public TreeTableView<String> getTreeTableView() {
-        return treeTableView;
-    }
-
     private void addMainDirectory() {
         TreeItem<String> selectedItem = treeTableView.getSelectionModel().getSelectedItem();
         if (selectedItem != null && isTableView(selectedItem)) {
@@ -95,7 +80,7 @@ public class TreeTableViewComponent {
             return;
         }
         TreeItem<String> newItem = new TreeItem<>("New Main Directory");
-        rootItem.getChildren().add(newItem);  // Add to rootItem so it’s on the same level as Default Directory
+        rootItem.getChildren().add(newItem);
     }
 
     private void addSubDirectory() {
@@ -119,14 +104,11 @@ public class TreeTableViewComponent {
             showAlert("Invalid Action", "No directory selected for TableView. Please select a directory or sub-directory first.");
             return;
         }
-        String tableViewName = "TableView" + tableViewCounter++;
+        String tableViewName = "TableView" + (tableViewMap.size() + 1);
         TreeItem<String> newItem = new TreeItem<>(tableViewName);
-
-        // Add the new TableView as the last TableView item in the selected directory or sub-directory
         selectedItem.getChildren().add(newItem);
         sortChildren(selectedItem);
 
-        // Create and add the new TableView to the map
         TableView<ObservableList<String>> newTableViewInstance = tableViewComponent.createNewTableView(tableViewName);
         tableViewMap.put(tableViewName, newTableViewInstance);
     }
@@ -136,8 +118,6 @@ public class TreeTableViewComponent {
         if (selectedItem != null && selectedItem != rootItem && !isDefaultDirectory(selectedItem)) {
             TreeItem<String> parent = selectedItem.getParent();
             parent.getChildren().remove(selectedItem);
-
-            // Remove the TableView from the map
             tableViewMap.remove(selectedItem.getValue());
         } else {
             showAlert("Invalid Action", "Cannot delete the Default Directory or Root.");
@@ -145,12 +125,10 @@ public class TreeTableViewComponent {
     }
 
     private boolean isDefaultDirectory(TreeItem<String> item) {
-        // Check if the item is the Default Directory
         return item.getValue().equals("Default Directory");
     }
 
     private boolean isTableView(TreeItem<String> item) {
-        // Basic check to determine if an item is a TableView
         return item.getValue().contains("TableView");
     }
 
@@ -166,9 +144,13 @@ public class TreeTableViewComponent {
     }
 
     private void showAlert(String title, String message) {
-        Alert alert = new Alert(AlertType.WARNING, message, ButtonType.OK);
+        Alert alert = new Alert(Alert.AlertType.WARNING, message, ButtonType.OK);
         alert.setTitle(title);
         alert.setHeaderText(null);
         alert.showAndWait();
+    }
+
+    public TreeTableView<String> getTreeTableView() {
+        return treeTableView;
     }
 }

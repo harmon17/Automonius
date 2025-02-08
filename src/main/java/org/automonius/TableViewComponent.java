@@ -10,31 +10,23 @@ import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyEvent;
 import javafx.scene.layout.*;
 import javafx.stage.Stage;
+import javafx.geometry.Insets;
+import javafx.geometry.Pos;
 
-import java.util.HashMap;
-import java.util.Map;
 import java.util.Stack;
 
 public class TableViewComponent {
 
     private final ObservableList<ObservableList<String>> defaultTableViewData1 = FXCollections.observableArrayList();
     private final ObservableList<ObservableList<String>> defaultTableViewData2 = FXCollections.observableArrayList();
-    private final Map<String, TableView<ObservableList<String>>> tableViewMap = new HashMap<>();
-    private final TreeTableViewComponent treeTableViewComponent;
-    private final VBox mainContainer;
     private final Stack<String> undoStack = new Stack<>();
 
     public TableViewComponent(boolean loadProject) {
-        mainContainer = new VBox(); // Initialize the main container
-        treeTableViewComponent = new TreeTableViewComponent(loadProject, this, mainContainer); // Initialize the TreeTableViewComponent
-
         if (loadProject) {
-            // Load existing project data into the tables
             ObservableList<String> loadedRow1 = FXCollections.observableArrayList("Loaded Step", "Loaded ObjectName", "Loaded Action", "Loaded Input", "Loaded Condition");
             defaultTableViewData1.add(loadedRow1);
             defaultTableViewData2.add(loadedRow1);
         } else {
-            // Default setup for new project
             ObservableList<String> defaultRow1 = FXCollections.observableArrayList("New Test Step", "Condition 1", "Remarks 1", "Condition1", "Reference1");
             defaultTableViewData1.add(defaultRow1);
             defaultTableViewData2.add(defaultRow1);
@@ -46,41 +38,7 @@ public class TableViewComponent {
     }
 
     public VBox createReusableComponentTableView() {
-        VBox reusableComponentBox = treeTableViewComponent.createTreeTableView();
-        TreeTableView<String> reusableComponentTreeTableView = treeTableViewComponent.getTreeTableView();
-
-        Button addDirectoryButton = new Button("Add Directory");
-        Button addTableViewButton = new Button("Add TableView");
-        Button deleteButton = new Button("Delete");
-
-        addDirectoryButton.setOnAction(e -> {
-            TreeItem<String> newDirectory = new TreeItem<>("New Directory");
-            reusableComponentTreeTableView.getRoot().getChildren().add(newDirectory);
-            tableViewMap.put(newDirectory.getValue(), createNewTableView(newDirectory.getValue()));
-
-        });
-
-        addTableViewButton.setOnAction(e -> {
-            TreeItem<String> selectedItem = reusableComponentTreeTableView.getSelectionModel().getSelectedItem();
-            if (selectedItem != null) {
-                TreeItem<String> newTableView = new TreeItem<>("New TableView");
-                selectedItem.getChildren().add(newTableView);
-                tableViewMap.put(newTableView.getValue(), createNewTableView(newTableView.getValue()));
-
-            }
-        });
-
-        deleteButton.setOnAction(e -> {
-            TreeItem<String> selectedItem = reusableComponentTreeTableView.getSelectionModel().getSelectedItem();
-            if (selectedItem != null && selectedItem.getParent() != null && !selectedItem.getValue().equals("Default Directory")) {
-                selectedItem.getParent().getChildren().remove(selectedItem);
-                tableViewMap.remove(selectedItem.getValue());
-            }
-        });
-
-        HBox buttons = new HBox(addDirectoryButton, addTableViewButton, deleteButton);
-        reusableComponentBox.getChildren().add(buttons);
-        return reusableComponentBox;
+        return createTableViewWithControls("Reusable Component", defaultTableViewData1);
     }
 
     public VBox createPropertiesView() {
@@ -88,41 +46,73 @@ public class TableViewComponent {
     }
 
     public VBox createTestPlanTableView() {
-        VBox testPlanBox = treeTableViewComponent.createTreeTableView();
-        TreeTableView<String> testPlanTreeTableView = treeTableViewComponent.getTreeTableView();
+        return createTableViewWithControls("Test Plan", defaultTableViewData1);
+    }
 
-        Button addDirectoryButton = new Button("Add Directory");
-        Button addTableViewButton = new Button("Add TableView");
-        Button deleteButton = new Button("Delete");
+    public VBox createTableView1() {
+        return createTableViewWithControls("TableView 1", defaultTableViewData1);
+    }
 
-        addDirectoryButton.setOnAction(e -> {
-            TreeItem<String> newDirectory = new TreeItem<>("New Directory");
-            testPlanTreeTableView.getRoot().getChildren().add(newDirectory);
-            tableViewMap.put(newDirectory.getValue(), createNewTableView(newDirectory.getValue()));
+    public VBox createTableView2() {
+        return createTableViewWithControls("TableView 2", defaultTableViewData2);
+    }
 
+    private VBox createTableViewWithControls(String label, ObservableList<ObservableList<String>> data) {
+        TableView<ObservableList<String>> tableView = new TableView<>(data);
+        addColumn(tableView, "Steps");
+        addColumn(tableView, "ObjectName");
+        addColumn(tableView, "Action");
+        addColumn(tableView, "Input");
+        addColumn(tableView, "Condition");
+
+        Button addRowButton = new Button("Add Row");
+        Button deleteRowButton = new Button("Delete Row");
+        addRowButton.setOnAction(e -> {
+            ObservableList<String> newRow = FXCollections.observableArrayList("New Test Step", "Condition 1", "Remarks 1", "Condition1", "Reference1");
+            for (int i = newRow.size(); i < tableView.getColumns().size(); i++) {
+                newRow.add("");
+            }
+            data.add(newRow);
         });
 
-        addTableViewButton.setOnAction(e -> {
-            TreeItem<String> selectedItem = testPlanTreeTableView.getSelectionModel().getSelectedItem();
-            if (selectedItem != null) {
-                TreeItem<String> newTableView = new TreeItem<>("New TableView");
-                selectedItem.getChildren().add(newTableView);
-                tableViewMap.put(newTableView.getValue(), createNewTableView(newTableView.getValue()));
-
+        deleteRowButton.setOnAction(e -> {
+            ObservableList<String> selectedItem = tableView.getSelectionModel().getSelectedItem();
+            if (selectedItem != null && data.size() > 1) {
+                data.remove(selectedItem);
             }
         });
 
-        deleteButton.setOnAction(e -> {
-            TreeItem<String> selectedItem = testPlanTreeTableView.getSelectionModel().getSelectedItem();
-            if (selectedItem != null && selectedItem.getParent() != null && !selectedItem.getValue().equals("Default Directory")) {
-                selectedItem.getParent().getChildren().remove(selectedItem);
-                tableViewMap.remove(selectedItem.getValue());
-            }
-        }); 
+        Button addColumnButton = new Button("Add Column");
+        Button deleteColumnButton = new Button("Delete Column");
 
-        HBox buttons = new HBox(addDirectoryButton, addTableViewButton, deleteButton);
-        testPlanBox.getChildren().add(buttons);
-        return testPlanBox;
+        addColumnButton.setOnAction(e -> {
+            String header = "New Column";
+            addColumn(tableView, header);
+            for (ObservableList<String> row : data) {
+                row.add("");
+            }
+        });
+
+        deleteColumnButton.setOnAction(e -> {
+            if (tableView.getColumns().size() > 5) { // Default columns are 5
+                TableColumn<ObservableList<String>, ?> lastColumn = tableView.getColumns().remove(tableView.getColumns().size() - 1);
+                for (ObservableList<String> row : data) {
+                    row.remove(row.size() - 1);
+                }
+            }
+        });
+
+        HBox rowButtons = new HBox(10, addRowButton, deleteRowButton);
+        rowButtons.setAlignment(Pos.CENTER_LEFT);
+        rowButtons.setPadding(new Insets(5));
+
+        HBox columnButtons = new HBox(10, addColumnButton, deleteColumnButton);
+        columnButtons.setAlignment(Pos.CENTER_LEFT);
+        columnButtons.setPadding(new Insets(5));
+
+        VBox tableViewBox = new VBox(10, new Label(label), tableView, rowButtons, columnButtons);
+        tableViewBox.setPadding(new Insets(10));
+        return tableViewBox;
     }
 
     public TableView<ObservableList<String>> createNewTableView(String name) {
@@ -137,108 +127,6 @@ public class TableViewComponent {
         newTableView.getItems().add(defaultRow);
 
         return newTableView;
-    }
-
-
-    public VBox createTableView1() {
-        TableView<ObservableList<String>> tableView1 = new TableView<>(defaultTableViewData1);
-        addColumn(tableView1, "Steps");
-        addColumn(tableView1, "ObjectName");
-        addColumn(tableView1, "Action");
-        addColumn(tableView1, "Input");
-        addColumn(tableView1, "Condition");
-
-        Button addRowButton = new Button("Add Row");
-        Button deleteRowButton = new Button("Delete Row");
-        addRowButton.setOnAction(e -> {
-            ObservableList<String> newRow = FXCollections.observableArrayList("New Test Step", "Condition 1", "Remarks 1", "Condition1", "Reference1");
-            for (int i = newRow.size(); i < tableView1.getColumns().size(); i++) {
-                newRow.add("");
-            }
-            defaultTableViewData1.add(newRow);
-        });
-
-        deleteRowButton.setOnAction(e -> {
-            ObservableList<String> selectedItem = tableView1.getSelectionModel().getSelectedItem();
-            if (selectedItem != null && defaultTableViewData1.size() > 1) {
-                defaultTableViewData1.remove(selectedItem);
-            }
-        });
-
-        Button addColumnButton = new Button("Add Column");
-        Button deleteColumnButton = new Button("Delete Column");
-
-        addColumnButton.setOnAction(e -> {
-            String header = "New Column";
-            addColumn(tableView1, header);
-            for (ObservableList<String> row : defaultTableViewData1) {
-                row.add("");
-            }
-        });
-
-        deleteColumnButton.setOnAction(e -> {
-            if (tableView1.getColumns().size() > 5) { // Default columns are 5
-                TableColumn<ObservableList<String>, ?> lastColumn = tableView1.getColumns().remove(tableView1.getColumns().size() - 1);
-                for (ObservableList<String> row : defaultTableViewData1) {
-                    row.remove(row.size() - 1);
-                }
-            }
-        });
-
-        HBox rowButtons = new HBox(addRowButton, deleteRowButton);
-        HBox columnButtons = new HBox(addColumnButton, deleteColumnButton);
-        VBox tableView1Box = new VBox(new Label("TableView1"), tableView1, rowButtons, columnButtons);
-        return tableView1Box;
-    }
-
-    public VBox createTableView2() {
-        TableView<ObservableList<String>> tableView2 = new TableView<>(defaultTableViewData2);
-        addColumn(tableView2, "Steps");
-        addColumn(tableView2, "Iteration");
-        addColumn(tableView2, "Sub-Iteration");
-        addColumn(tableView2, "Column");
-
-        Button addRowButton = new Button("Add Row");
-        Button deleteRowButton = new Button("Delete Row");
-        addRowButton.setOnAction(e -> {
-            ObservableList<String> newRow = FXCollections.observableArrayList("New Test Step", "Condition 1", "Remarks 1", "Condition1", "Reference1");
-            for (int i = newRow.size(); i < tableView2.getColumns().size(); i++) {
-                newRow.add("");
-            }
-            defaultTableViewData2.add(newRow);
-        });
-
-        deleteRowButton.setOnAction(e -> {
-            ObservableList<String> selectedItem = tableView2.getSelectionModel().getSelectedItem();
-            if (selectedItem != null && defaultTableViewData2.size() > 1) {
-                defaultTableViewData2.remove(selectedItem);
-            }
-        });
-
-        Button addColumnButton = new Button("Add Column");
-        Button deleteColumnButton = new Button("Delete Column");
-
-        addColumnButton.setOnAction(e -> {
-            String header = "New Column";
-            addColumn(tableView2, header);
-            for (ObservableList<String> row : defaultTableViewData2) {
-                row.add("");
-            }
-        });
-
-        deleteColumnButton.setOnAction(e -> {
-            if (tableView2.getColumns().size() > 4) { // Default columns are 4
-                TableColumn<ObservableList<String>, ?> lastColumn = tableView2.getColumns().remove(tableView2.getColumns().size() - 1);
-                for (ObservableList<String> row : defaultTableViewData2) {
-                    row.remove(row.size() - 1);
-                }
-            }
-        });
-
-        HBox rowButtons = new HBox(addRowButton, deleteRowButton);
-        HBox columnButtons = new HBox(addColumnButton, deleteColumnButton);
-        VBox tableView2Box = new VBox(new Label("TableView2"), tableView2, rowButtons, columnButtons);
-        return tableView2Box;
     }
 
     private void addColumn(TableView<ObservableList<String>> tableView, String header) {

@@ -31,6 +31,10 @@ public class MainController {
         return treeTableViewComponent.createTreeTableView();
     }
 
+    public VBox createTableView1() {
+        return tableViewComponent.createTableView1();
+    }
+
     public VBox createTableView2() {
         return tableViewComponent.createTableView2();
     }
