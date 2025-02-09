@@ -1,10 +1,12 @@
+org\automonius\Main$1.class
+org\automonius\MainController.class
+org\automonius\TableViewComponent.class
+org\automonius\MainUI.class
 org\automonius\TestStep.class
 org\automonius\TreeTableViewComponent.class
 org\automonius\Main.class
 org\automonius\TableViewComponent$1.class
 org\automonius\MenuBarComponent.class
 org\automonius\CustomTextField.class
-org\automonius\MainController.class
-org\automonius\TableViewComponent.class
 org\automonius\LayoutComponent.class
-org\automonius\MainUI.class
+org\automonius\Main$2.class
