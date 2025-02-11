@@ -1,8 +1,8 @@
 package org.automonius;
 
 import javafx.application.Application;
+import javafx.scene.Parent;
 import javafx.scene.Scene;
-import javafx.scene.layout.BorderPane;
 import javafx.stage.Stage;
 
 public class MainUI extends Application {
@@ -18,9 +18,12 @@ public class MainUI extends Application {
 
         // Create Layout for Main Area
         LayoutComponent layoutComponent = new LayoutComponent();
-        BorderPane layout = layoutComponent.createLayout(loadProject);
+        Parent layout = layoutComponent.createMainLayout(loadProject);
 
+        // Create a new scene with the main layout
         Scene scene = new Scene(layout, 800, 600);
+
+        // Set the initial scene
         primaryStage.setScene(scene);
         primaryStage.show();
     }
