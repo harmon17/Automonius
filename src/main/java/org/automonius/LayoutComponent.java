@@ -13,18 +13,25 @@ import javafx.stage.Stage;
 
 public class LayoutComponent extends Application {
 
+    private Scene mainScene;
+    private Scene secondaryScene;
+    private Stage primaryStage;
+
     @Override
     public void start(Stage primaryStage) {
-        primaryStage.setTitle("Hover Button Example");
+        this.primaryStage = primaryStage;
+        primaryStage.setTitle("Button Navigation Example");
 
         // Create the main layout
         Parent mainLayout = createMainLayout(false);
+        mainScene = new Scene(mainLayout, 800, 600);
 
-        // Create a new scene with the main layout
-        Scene scene = new Scene(mainLayout, 800, 600);
+        // Create the secondary layout
+        Parent secondaryLayout = createSecondaryLayout();
+        secondaryScene = new Scene(secondaryLayout, 800, 600);
 
         // Set the initial scene
-        primaryStage.setScene(scene);
+        primaryStage.setScene(mainScene);
         primaryStage.show();
     }
 
@@ -36,52 +43,33 @@ public class LayoutComponent extends Application {
         Button button2 = createButtonWithIcon("/IMAGE/presentation.png");
         Button button3 = createButtonWithIcon("/IMAGE/settings.png");
 
-        // Initially hide the buttons
-        button1.setVisible(false);
-        button2.setVisible(false);
-        button3.setVisible(false);
+        // Event listener to switch to secondary layout when middle button is clicked
+        button2.setOnAction(e -> switchToSecondaryLayout());
 
         // Create the button box and set its alignment
         VBox buttonBox = new VBox(10, button1, button2, button3);
         buttonBox.setAlignment(Pos.CENTER_LEFT);
-        buttonBox.setStyle("-fx-background-color: rgba(255, 255, 255, 0.5);");
+        buttonBox.setPadding(new Insets(10));
 
-        // Create a thin trigger zone for hover at the edge of the left screen
-        Pane triggerZone = new Pane();
-        triggerZone.setPrefWidth(3);
-        triggerZone.setStyle("-fx-background-color: transparent;");
-
-        // Event listener to make buttons visible
-        triggerZone.setOnMouseEntered(e -> {
-            button1.setVisible(true);
-            button2.setVisible(true);
-            button3.setVisible(true);
-        });
-
-        buttonBox.setOnMouseEntered(e -> {
-            button1.setVisible(true);
-            button2.setVisible(true);
-            button3.setVisible(true);
-        });
-
-        // Event listener to hide buttons when the mouse exits the button area
-        buttonBox.setOnMouseExited(e -> {
-            button1.setVisible(false);
-            button2.setVisible(false);
-            button3.setVisible(false);
-        });
-
-        // Create a StackPane to overlay the hover buttons on the main layout
-        StackPane overlayPane = new StackPane();
-        overlayPane.getChildren().addAll(triggerZone, buttonBox);
-        StackPane.setAlignment(triggerZone, Pos.CENTER_LEFT);
-        StackPane.setAlignment(buttonBox, Pos.CENTER_LEFT);
-        StackPane.setMargin(buttonBox, new Insets(0, 0, 0, -45)); // Adjust the margin to significantly overlap buttons with the main layout
-
-        // Add the overlayPane to the main layout
-        mainLayout.setLeft(overlayPane);
+        // Add the button box directly to the main layout
+        mainLayout.setLeft(buttonBox);
 
         return mainLayout;
+    }
+
+    public Parent createSecondaryLayout() {
+        BorderPane secondaryLayout = new BorderPane();
+
+        // Create a button to return to the main layout
+        Button backButton = new Button("Back to Main Page");
+        backButton.setOnAction(e -> switchToMainLayout());
+
+        // Align the back button to the center
+        StackPane centerPane = new StackPane();
+        centerPane.getChildren().add(backButton);
+        secondaryLayout.setCenter(centerPane);
+
+        return secondaryLayout;
     }
 
     public BorderPane createLayout(boolean loadProject) {
@@ -141,6 +129,14 @@ public class LayoutComponent extends Application {
         imageView.setFitWidth(60);
         button.setGraphic(imageView);
         return button;
+    }
+
+    private void switchToSecondaryLayout() {
+        primaryStage.setScene(secondaryScene);
+    }
+
+    private void switchToMainLayout() {
+        primaryStage.setScene(mainScene);
     }
 
     public static void main(String[] args) {
