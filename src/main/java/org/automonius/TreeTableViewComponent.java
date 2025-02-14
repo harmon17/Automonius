@@ -3,7 +3,12 @@ package org.automonius;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
+import javafx.geometry.Insets;
+import javafx.geometry.Pos;
 import javafx.scene.control.*;
+import javafx.scene.image.Image;
+import javafx.scene.image.ImageView;
+import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
 
 import java.util.HashMap;
@@ -68,18 +73,24 @@ public class TreeTableViewComponent {
         VBox vBox = new VBox();
 
         if (isForDirectory) {
-            // Directory buttons, only add them for Test Plan and Reusable Component views, not for TableView1
-            Button addDirectoryButton = new Button("Add Main Directory");
-            Button addSubDirectoryButton = new Button("Add Sub-Directory");
-            Button addTableViewButton = new Button("Add TableView");
-            Button deleteButton = new Button("Delete");
+            // Directory buttons with images in horizontal layout
+            Button addDirectoryButton = createButtonWithImage("IMAGE/MD.png");
+            Button addSubDirectoryButton = createButtonWithImage("IMAGE/SD.png");
+            Button addTableViewButton = createButtonWithImage("IMAGE/table.png");
+            Button deleteButton = createButtonWithImage("IMAGE/delete.png");
 
             addDirectoryButton.setOnAction(e -> addMainDirectory());
             addSubDirectoryButton.setOnAction(e -> addSubDirectory());
             addTableViewButton.setOnAction(e -> addTableView());
             deleteButton.setOnAction(e -> deleteItem());
 
-            vBox.getChildren().addAll(treeTableView, addDirectoryButton, addSubDirectoryButton, addTableViewButton, deleteButton);
+            // Create the button box and set its alignment to horizontal
+            HBox buttonBox = new HBox(10, addDirectoryButton, addSubDirectoryButton, addTableViewButton, deleteButton);
+            buttonBox.setAlignment(Pos.CENTER_LEFT);
+            buttonBox.setPadding(new Insets(10));
+
+            // Add the button box above the TreeTableView
+            vBox.getChildren().addAll(buttonBox, treeTableView);
         } else {
             vBox.getChildren().add(treeTableView);
         }
@@ -87,11 +98,21 @@ public class TreeTableViewComponent {
         return vBox;
     }
 
+    private Button createButtonWithImage(String imagePath) {
+        Button button = new Button();
+        Image icon = new Image(getClass().getClassLoader().getResourceAsStream(imagePath));
+        ImageView imageView = new ImageView(icon);
+        imageView.setFitHeight(30);  // Adjust height to make it more minimalist
+        imageView.setFitWidth(30);
+        button.setGraphic(imageView);
+        return button;
+    }
+
     public TreeTableView<String> getTreeTableView() {
         return treeTableView;
     }
 
-    private void addMainDirectory() {
+    public void addMainDirectory() {
         TreeItem<String> selectedItem = treeTableView.getSelectionModel().getSelectedItem();
         if (selectedItem != null && isTableView(selectedItem)) {
             showAlert("Invalid Action", "Cannot add a main directory inside a TableView.");
@@ -101,7 +122,7 @@ public class TreeTableViewComponent {
         rootItem.getChildren().add(newItem);  // Add to rootItem so it’s on the same level as Default Directory
     }
 
-    private void addSubDirectory() {
+    public void addSubDirectory() {
         TreeItem<String> selectedItem = treeTableView.getSelectionModel().getSelectedItem();
         if (selectedItem == null || selectedItem == rootItem) {
             showAlert("Invalid Action", "No directory selected for sub-directory. Please select a directory first.");
@@ -116,7 +137,7 @@ public class TreeTableViewComponent {
         sortChildren(selectedItem);
     }
 
-    private void addTableView() {
+    public void addTableView() {
         TreeItem<String> selectedItem = treeTableView.getSelectionModel().getSelectedItem();
         if (selectedItem == null || isTableView(selectedItem)) {
             showAlert("Invalid Action", "No directory selected for TableView. Please select a directory or sub-directory first.");
@@ -134,7 +155,7 @@ public class TreeTableViewComponent {
         tableViewMap.put(tableViewName, newTableViewInstance);
     }
 
-    private void deleteItem() {
+    public void deleteItem() {
         TreeItem<String> selectedItem = treeTableView.getSelectionModel().getSelectedItem();
         if (selectedItem != null && selectedItem != rootItem && !isDefaultDirectory(selectedItem)) {
             TreeItem<String> parent = selectedItem.getParent();

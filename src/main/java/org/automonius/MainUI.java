@@ -18,9 +18,10 @@ public class MainUI extends Application {
 
         // Create Layout for Main Area
         LayoutComponent layoutComponent = new LayoutComponent();
-        Parent layout = layoutComponent.createMainLayout(loadProject);
+        layoutComponent.start(primaryStage);
 
         // Create a new scene with the main layout
+        Parent layout = layoutComponent.createMainLayout(loadProject);
         Scene scene = new Scene(layout, 800, 600);
 
         // Set the initial scene

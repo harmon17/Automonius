@@ -1,6 +1,7 @@
 org\automonius\Main$1.class
 org\automonius\MainController.class
 org\automonius\TableViewComponent.class
+org\automonius\ExecutionPane.class
 org\automonius\MainUI.class
 org\automonius\TestStep.class
 org\automonius\TreeTableViewComponent.class

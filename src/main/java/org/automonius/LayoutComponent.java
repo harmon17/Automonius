@@ -14,8 +14,9 @@ import javafx.stage.Stage;
 public class LayoutComponent extends Application {
 
     private Scene mainScene;
-    private Scene secondaryScene;
+    private Scene executionScene;
     private Stage primaryStage;
+    private TreeTableViewComponent treeTableViewComponent;
 
     @Override
     public void start(Stage primaryStage) {
@@ -26,11 +27,10 @@ public class LayoutComponent extends Application {
         Parent mainLayout = createMainLayout(false);
         mainScene = new Scene(mainLayout, 800, 600);
 
-        // Create the secondary layout
-        Parent secondaryLayout = createSecondaryLayout();
-        secondaryScene = new Scene(secondaryLayout, 800, 600);
+        // Create the ExecutionPane layout
+        executionScene = new Scene(new ExecutionPane(this::switchToMainLayout), 800, 600);
 
-        // Set the initial scene
+        // Set the initial scene to the main layout
         primaryStage.setScene(mainScene);
         primaryStage.show();
     }
@@ -38,38 +38,32 @@ public class LayoutComponent extends Application {
     public Parent createMainLayout(boolean loadProject) {
         BorderPane mainLayout = createLayout(loadProject);
 
-        // Create the buttons with icons
-        Button button1 = createButtonWithIcon("/IMAGE/bank.png");
-        Button button2 = createButtonWithIcon("/IMAGE/presentation.png");
-        Button button3 = createButtonWithIcon("/IMAGE/settings.png");
+        // Initialize the TableViewComponent
+        TableViewComponent tableViewComponent = new TableViewComponent(loadProject);
 
-        // Event listener to switch to secondary layout when middle button is clicked
-        button2.setOnAction(e -> switchToSecondaryLayout());
+        // Initialize the TreeTableViewComponent with the initialized TableViewComponent
+        treeTableViewComponent = new TreeTableViewComponent(loadProject, tableViewComponent, new VBox());
 
-        // Create the button box and set its alignment
-        VBox buttonBox = new VBox(10, button1, button2, button3);
-        buttonBox.setAlignment(Pos.CENTER_LEFT);
-        buttonBox.setPadding(new Insets(10));
+        // Create the additional buttons with images
+        Button button1 = createButtonWithImage("IMAGE/bank.png", 60, 60);
+        Button button2 = createButtonWithImage("IMAGE/presentation.png", 60, 60);
+        Button button3 = createButtonWithImage("IMAGE/settings.png", 60, 60);
 
-        // Add the button box directly to the main layout
-        mainLayout.setLeft(buttonBox);
+        // Event listener to switch to the ExecutionPane when the middle button is clicked
+        button2.setOnAction(e -> switchToExecutionPane());
+
+        // Event listener to switch to the main layout when the top button is clicked
+        button1.setOnAction(e -> switchToMainLayout());
+
+        // Layout for the additional buttons
+        VBox buttonLayout = new VBox(10, button1, button2, button3);
+        buttonLayout.setAlignment(Pos.CENTER_LEFT);
+        buttonLayout.setPadding(new Insets(10));
+
+        // Add the buttons layout to the left of the main layout
+        mainLayout.setLeft(buttonLayout);
 
         return mainLayout;
-    }
-
-    public Parent createSecondaryLayout() {
-        BorderPane secondaryLayout = new BorderPane();
-
-        // Create a button to return to the main layout
-        Button backButton = new Button("Back to Main Page");
-        backButton.setOnAction(e -> switchToMainLayout());
-
-        // Align the back button to the center
-        StackPane centerPane = new StackPane();
-        centerPane.getChildren().add(backButton);
-        secondaryLayout.setCenter(centerPane);
-
-        return secondaryLayout;
     }
 
     public BorderPane createLayout(boolean loadProject) {
@@ -120,23 +114,38 @@ public class LayoutComponent extends Application {
         return mainLayout;
     }
 
-    // Method to create a button with an icon
-    private Button createButtonWithIcon(String iconPath) {
+    private Button createButtonWithImage(String imagePath, double width, double height) {
         Button button = new Button();
-        Image icon = new Image(getClass().getResourceAsStream(iconPath));
-        ImageView imageView = new ImageView(icon);
-        imageView.setFitHeight(60); // Make the buttons bigger
-        imageView.setFitWidth(60);
-        button.setGraphic(imageView);
+        try {
+            // Log the image path
+            System.out.println("Loading image from: " + getClass().getClassLoader().getResource(imagePath));
+
+            // Use ClassLoader to load the image resource
+            Image icon = new Image(getClass().getClassLoader().getResourceAsStream(imagePath));
+            ImageView imageView = new ImageView(icon);
+            imageView.setFitWidth(width);
+            imageView.setFitHeight(height);
+            button.setGraphic(imageView);
+        } catch (Exception e) {
+            System.out.println("Error loading image: " + e.getMessage());
+        }
         return button;
     }
 
-    private void switchToSecondaryLayout() {
-        primaryStage.setScene(secondaryScene);
+    private void switchToExecutionPane() {
+        if (primaryStage != null) {
+            primaryStage.setScene(executionScene);
+        } else {
+            System.out.println("Error: primaryStage is null");
+        }
     }
 
     private void switchToMainLayout() {
-        primaryStage.setScene(mainScene);
+        if (primaryStage != null) {
+            primaryStage.setScene(mainScene);
+        } else {
+            System.out.println("Error: primaryStage is null");
+        }
     }
 
     public static void main(String[] args) {
