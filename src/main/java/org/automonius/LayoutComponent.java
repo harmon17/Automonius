@@ -1,22 +1,38 @@
 package org.automonius;
 
+import javafx.animation.TranslateTransition;
 import javafx.application.Application;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
+import javafx.scene.control.Label;
+import javafx.scene.control.MenuBar;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
-import javafx.scene.layout.*;
+import javafx.scene.layout.BorderPane;
+import javafx.scene.layout.ColumnConstraints;
+import javafx.scene.layout.GridPane;
+import javafx.scene.layout.HBox;
+import javafx.scene.layout.RowConstraints;
+import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
+import javafx.util.Duration;
 
 public class LayoutComponent extends Application {
 
     private Scene mainScene;
     private Scene executionScene;
     private Stage primaryStage;
-    private TreeTableViewComponent treeTableViewComponent;
+    private VBox buttonLayout;
+    private boolean areButtonsVisible;
+    private BorderPane mainLayout;
+    private BorderPane executionLayout;
+    private MenuBarComponent menuBarComponent;
+    private HBox topContainer;
+    private TranslateTransition showTransition;
+    private TranslateTransition hideTransition;
 
     @Override
     public void start(Stage primaryStage) {
@@ -28,7 +44,8 @@ public class LayoutComponent extends Application {
         mainScene = new Scene(mainLayout, 800, 600);
 
         // Create the ExecutionPane layout
-        executionScene = new Scene(new ExecutionPane(this::switchToMainLayout), 800, 600);
+        executionLayout = createExecutionLayout();
+        executionScene = new Scene(executionLayout, 800, 600);
 
         // Set the initial scene to the main layout
         primaryStage.setScene(mainScene);
@@ -36,13 +53,13 @@ public class LayoutComponent extends Application {
     }
 
     public Parent createMainLayout(boolean loadProject) {
-        BorderPane mainLayout = createLayout(loadProject);
+        mainLayout = createLayout(loadProject);
 
         // Initialize the TableViewComponent
         TableViewComponent tableViewComponent = new TableViewComponent(loadProject);
 
         // Initialize the TreeTableViewComponent with the initialized TableViewComponent
-        treeTableViewComponent = new TreeTableViewComponent(loadProject, tableViewComponent, new VBox());
+        TreeTableViewComponent treeTableViewComponent = new TreeTableViewComponent(loadProject, tableViewComponent, new VBox());
 
         // Create the additional buttons with images
         Button button1 = createButtonWithImage("IMAGE/bank.png", 60, 60);
@@ -56,21 +73,40 @@ public class LayoutComponent extends Application {
         button1.setOnAction(e -> switchToMainLayout());
 
         // Layout for the additional buttons
-        VBox buttonLayout = new VBox(10, button1, button2, button3);
+        buttonLayout = new VBox(10, button1, button2, button3);
         buttonLayout.setAlignment(Pos.CENTER_LEFT);
         buttonLayout.setPadding(new Insets(10));
+        buttonLayout.setStyle("-fx-background-color: #f0f0f0;");
+        buttonLayout.setPrefWidth(80); // Set the preferred width to fit the buttons
 
-        // Add the buttons layout to the left of the main layout
-        mainLayout.setLeft(buttonLayout);
+        // Initially hide buttons
+        areButtonsVisible = false;
+        buttonLayout.setTranslateX(-buttonLayout.getPrefWidth());
+        buttonLayout.setVisible(false);
+
+        // Create slide in/out transitions
+        showTransition = new TranslateTransition(Duration.millis(300), buttonLayout);
+        hideTransition = new TranslateTransition(Duration.millis(300), buttonLayout);
 
         return mainLayout;
     }
 
     public BorderPane createLayout(boolean loadProject) {
-        BorderPane mainLayout = new BorderPane();
+        mainLayout = new BorderPane();
 
-        MenuBarComponent menuBarComponent = new MenuBarComponent();
-        mainLayout.setTop(menuBarComponent.createMenuBar());
+        menuBarComponent = new MenuBarComponent();
+        MenuBar menuBar = menuBarComponent.createMenuBar(this);
+
+        // Create the toggle button with an image
+        Button toggleButton = createButtonWithImage("IMAGE/toggle.png", 20, 20);
+        toggleButton.setOnAction(e -> toggleButtonsVisibility());
+
+        // Add the toggle button and the menu bar to a horizontal box
+        topContainer = new HBox(10, toggleButton, menuBar);
+        topContainer.setAlignment(Pos.CENTER_LEFT);
+        topContainer.setPadding(new Insets(10));
+
+        mainLayout.setTop(topContainer);
 
         MainController mainController = new MainController(loadProject);
         VBox mainContainer = mainController.getMainContainer();
@@ -111,7 +147,54 @@ public class LayoutComponent extends Application {
 
         mainLayout.setCenter(mainArea);
 
+        // Initially hide buttons
+        mainLayout.setLeft(null);
+
         return mainLayout;
+    }
+
+    public BorderPane createExecutionLayout() {
+        executionLayout = new BorderPane();
+
+        menuBarComponent = new MenuBarComponent();
+        MenuBar menuBar = menuBarComponent.createMenuBar(this);
+
+        // Add the toggle button and the menu bar to a horizontal box
+        HBox executionTopContainer = new HBox(10, topContainer.getChildren().get(0), menuBar);
+        executionTopContainer.setAlignment(Pos.CENTER_LEFT);
+        executionTopContainer.setPadding(new Insets(10));
+
+        executionLayout.setTop(executionTopContainer);
+
+        VBox executionContent = new VBox();
+        executionContent.setAlignment(Pos.CENTER);
+        executionContent.setSpacing(10);
+        executionContent.setPadding(new Insets(10));
+
+        // Add components to executionContent
+        executionContent.getChildren().add(new Label("Execution Content")); // Example content
+
+        executionLayout.setCenter(executionContent);
+
+        return executionLayout;
+    }
+
+    public void hideButtons() {
+        hideTransition.setToX(-buttonLayout.getPrefWidth());
+        hideTransition.setOnFinished(e -> {
+            buttonLayout.setVisible(false);
+            ((BorderPane) primaryStage.getScene().getRoot()).setLeft(null);
+        });
+        hideTransition.play();
+        areButtonsVisible = false;
+    }
+
+    public void showButtons() {
+        buttonLayout.setVisible(true);
+        ((BorderPane) primaryStage.getScene().getRoot()).setLeft(buttonLayout);
+        showTransition.setToX(0);
+        showTransition.play();
+        areButtonsVisible = true;
     }
 
     private Button createButtonWithImage(String imagePath, double width, double height) {
@@ -132,9 +215,18 @@ public class LayoutComponent extends Application {
         return button;
     }
 
+    private void toggleButtonsVisibility() {
+        if (areButtonsVisible) {
+            hideButtons();
+        } else {
+            showButtons();
+        }
+    }
+
     private void switchToExecutionPane() {
         if (primaryStage != null) {
             primaryStage.setScene(executionScene);
+            synchronizeLayout();
         } else {
             System.out.println("Error: primaryStage is null");
         }
@@ -143,8 +235,25 @@ public class LayoutComponent extends Application {
     private void switchToMainLayout() {
         if (primaryStage != null) {
             primaryStage.setScene(mainScene);
+            synchronizeLayout();
         } else {
             System.out.println("Error: primaryStage is null");
+        }
+    }
+
+    private void synchronizeLayout() {
+        BorderPane rootPane = (BorderPane) primaryStage.getScene().getRoot();
+        if (rootPane != null) {
+            if (areButtonsVisible) {
+                rootPane.setLeft(buttonLayout);
+                buttonLayout.setTranslateX(0);
+                buttonLayout.setVisible(true);
+            } else {
+                rootPane.setLeft(null);
+                buttonLayout.setTranslateX(-buttonLayout.getPrefWidth());
+                buttonLayout.setVisible(false);
+            }
+            rootPane.setTop(topContainer);
         }
     }
 
