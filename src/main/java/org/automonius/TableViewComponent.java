@@ -6,15 +6,25 @@ import javafx.collections.ObservableList;
 import javafx.geometry.Insets;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
+import javafx.scene.control.cell.PropertyValueFactory;
 import javafx.scene.control.cell.TextFieldTableCell;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyEvent;
 import javafx.scene.layout.*;
 import javafx.stage.Stage;
 
+import java.lang.reflect.Method;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Stack;
+import java.util.stream.Collectors;
+
+import org.utils.ActionDiscovery;
+import org.Commands.SampleCommands;
+import org.annotations.Action;
+import org.annotations.InputType;
+import org.annotations.ObjectType;
 
 public class TableViewComponent {
 
@@ -24,6 +34,7 @@ public class TableViewComponent {
     private final TreeTableViewComponent treeTableViewComponent;
     private final VBox mainContainer;
     private final Stack<String> undoStack = new Stack<>();
+    private final ObservableList<ActionData> tableView1Data = FXCollections.observableArrayList();
 
     public TableViewComponent(boolean loadProject) {
         mainContainer = new VBox(); // Initialize the main container
@@ -40,6 +51,17 @@ public class TableViewComponent {
             defaultTableViewData1.add(defaultRow1);
             defaultTableViewData2.add(defaultRow1);
         }
+
+        // Discover actions and populate tableView1Data
+        List<Method> actions = ActionDiscovery.discoverActions(SampleCommands.class);
+        for (Method action : actions) {
+            Action annotation = action.getAnnotation(Action.class);
+            tableView1Data.add(new ActionData(annotation.object().toString(), annotation.desc(), action.getName(), annotation.input()));
+        }
+    }
+
+    public ObservableList<ActionData> getTableView1Data() {
+        return tableView1Data;
     }
 
     public TableView<ObservableList<String>> createNewTableView(String name) {
@@ -254,53 +276,32 @@ public class TableViewComponent {
     }
 
     public VBox createTableView1() {
-        TableView<ObservableList<String>> tableView1 = new TableView<>(defaultTableViewData1);
-        addColumn(tableView1, "Steps");
-        addColumn(tableView1, "ObjectName");
-        addColumn(tableView1, "Action");
-        addColumn(tableView1, "Input");
-        addColumn(tableView1, "Condition");
+        ComboBox<ObjectType> filterComboBox = new ComboBox<>(FXCollections.observableArrayList(ObjectType.values()));
+        filterComboBox.getSelectionModel().selectFirst();
 
-        Button addRowButton = new Button("Add Row");
-        Button deleteRowButton = new Button("Delete Row");
-        addRowButton.setOnAction(e -> {
-            ObservableList<String> newRow = FXCollections.observableArrayList("New Test Step", "Condition 1", "Remarks 1", "Condition1", "Reference1");
-            for (int i = newRow.size(); i < tableView1.getColumns().size(); i++) {
-                newRow.add("");
-            }
-            defaultTableViewData1.add(newRow);
+        TableView<ActionData> tableView1 = new TableView<>();
+        filterComboBox.setOnAction(e -> {
+            ObjectType selectedObjectType = filterComboBox.getSelectionModel().getSelectedItem();
+            tableView1.setItems(FXCollections.observableArrayList(tableView1Data.stream()
+                    .filter(action -> action.getObject().equals(selectedObjectType.toString()))
+                    .collect(Collectors.toList())));
         });
 
-        deleteRowButton.setOnAction(e -> {
-            ObservableList<String> selectedItem = tableView1.getSelectionModel().getSelectedItem();
-            if (selectedItem != null && defaultTableViewData1.size() > 1) {
-                defaultTableViewData1.remove(selectedItem);
-            }
-        });
+        TableColumn<ActionData, String> objectColumn = new TableColumn<>("Object");
+        objectColumn.setCellValueFactory(new PropertyValueFactory<>("object"));
 
-        Button addColumnButton = new Button("Add Column");
-        Button deleteColumnButton = new Button("Delete Column");
+        TableColumn<ActionData, String> descriptionColumn = new TableColumn<>("Description");
+        descriptionColumn.setCellValueFactory(new PropertyValueFactory<>("description"));
 
-        addColumnButton.setOnAction(e -> {
-            String header = "New Column";
-            addColumn(tableView1, header);
-            for (ObservableList<String> row : defaultTableViewData1) {
-                row.add("");
-            }
-        });
+        TableColumn<ActionData, String> methodColumn = new TableColumn<>("Method");
+        methodColumn.setCellValueFactory(new PropertyValueFactory<>("method"));
 
-        deleteColumnButton.setOnAction(e -> {
-            if (tableView1.getColumns().size() > 5) { // Default columns are 5
-                TableColumn<ObservableList<String>, ?> lastColumn = tableView1.getColumns().remove(tableView1.getColumns().size() - 1);
-                for (ObservableList<String> row : defaultTableViewData1) {
-                    row.remove(row.size() - 1);
-                }
-            }
-        });
+        TableColumn<ActionData, InputType> inputColumn = new TableColumn<>("Requires Input");
+        inputColumn.setCellValueFactory(new PropertyValueFactory<>("input"));
 
-        HBox rowButtons = new HBox(10, addRowButton, deleteRowButton);
-        HBox columnButtons = new HBox(10, addColumnButton, deleteColumnButton);
-        VBox tableView1Box = new VBox(10, new Label("TableView1"), tableView1, rowButtons, columnButtons);
+        tableView1.getColumns().addAll(objectColumn, descriptionColumn, methodColumn, inputColumn);
+
+        VBox tableView1Box = new VBox(10, new Label("TableView1"), filterComboBox, tableView1);
         tableView1Box.setPadding(new Insets(10));
         return tableView1Box;
     }
