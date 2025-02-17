@@ -3,5 +3,7 @@ package org.annotations;
 public enum InputType {
     YES,
     NO,
-    NONE
+    NONE,
+    XML,
+    JSON
 }

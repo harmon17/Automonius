@@ -3,6 +3,8 @@ package org.automonius;
 import javafx.collections.FXCollections;
 import javafx.geometry.Insets;
 import javafx.scene.control.*;
+import javafx.scene.control.cell.ComboBoxTableCell;
+import javafx.scene.control.cell.PropertyValueFactory;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
 import org.annotations.Action;
@@ -27,7 +29,7 @@ public class TableViewComponent {
         Button addRowButton = new Button("Add Row");
         Button deleteRowButton = new Button("Delete Row");
         addRowButton.setOnAction(e -> {
-            ActionData newRow = new ActionData("", "", "", InputType.NONE);  // Correct InputType should be set here
+            ActionData newRow = new ActionData("", "", "", InputType.NONE);  // Initial empty row
             tableView2.getItems().add(newRow);
         });
 
@@ -44,4 +46,52 @@ public class TableViewComponent {
         return tableView2Box;
     }
 
+    public VBox createCommonTableViewLayout(String tableName) {
+        TableView<ActionData> tableView = tableManager.getTableViewMap().get(tableName);
+
+        // Create columns for Object and Method with empty cells initially
+        List<String> objectList = actions.stream()
+                .map(action -> action.getAnnotation(Action.class).object().toString())
+                .distinct()
+                .collect(Collectors.toList());
+
+        List<String> methodList = actions.stream()
+                .map(Method::getName)
+                .distinct()
+                .collect(Collectors.toList());
+
+        TableColumn<ActionData, String> objectColumn = new TableColumn<>("Object");
+        objectColumn.setCellFactory(ComboBoxTableCell.forTableColumn(FXCollections.observableArrayList(objectList)));
+        objectColumn.setCellValueFactory(new PropertyValueFactory<>("object"));
+        objectColumn.setEditable(true);  // Ensure column is editable
+
+        TableColumn<ActionData, String> methodColumn = new TableColumn<>("Method");
+        methodColumn.setCellFactory(ComboBoxTableCell.forTableColumn(FXCollections.observableArrayList(methodList)));
+        methodColumn.setCellValueFactory(new PropertyValueFactory<>("method"));
+        methodColumn.setEditable(true);  // Ensure column is editable
+
+        tableView.setEditable(true);  // Enable editing for the table
+        tableView.getColumns().addAll(objectColumn, methodColumn);
+
+        Label tableCaption = new Label(tableName);
+
+        Button addRowButton = new Button("Add Row");
+        Button deleteRowButton = new Button("Delete Row");
+        addRowButton.setOnAction(e -> {
+            ActionData newRow = new ActionData("", "", "", InputType.NONE);  // Initial empty row
+            tableView.getItems().add(newRow);
+        });
+
+        deleteRowButton.setOnAction(e -> {
+            ActionData selectedItem = tableView.getSelectionModel().getSelectedItem();
+            if (selectedItem != null && tableView.getItems().size() > 1) {
+                tableView.getItems().remove(selectedItem);
+            }
+        });
+
+        HBox rowButtons = new HBox(10, addRowButton, deleteRowButton);
+        VBox tableViewBox = new VBox(10, tableCaption, tableView, rowButtons);
+        tableViewBox.setPadding(new Insets(10));
+        return tableViewBox;
+    }
 }

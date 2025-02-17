@@ -16,6 +16,7 @@ org\automonius\MainUI.class
 org\annotations\InputType.class
 org\automonius\TreeTableViewComponent.class
 org\automonius\Main.class
+org\automonius\TableManager$1.class
 org\automonius\CustomTextField.class
 org\automonius\ActionData.class
 org\automonius\Main$2.class

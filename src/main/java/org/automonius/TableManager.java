@@ -2,19 +2,21 @@ package org.automonius;
 
 import javafx.collections.FXCollections;
 import javafx.geometry.Insets;
+import javafx.scene.Scene;
 import javafx.scene.control.*;
 import javafx.scene.control.cell.ComboBoxTableCell;
 import javafx.scene.control.cell.PropertyValueFactory;
+import javafx.scene.input.KeyCode;
+import javafx.scene.input.KeyEvent;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
+import javafx.stage.Modality;
+import javafx.stage.Stage;
 import org.annotations.Action;
 import org.annotations.InputType;
 
 import java.lang.reflect.Method;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Stack;
+import java.util.*;
 import java.util.stream.Collectors;
 
 public class TableManager {
@@ -38,23 +40,72 @@ public class TableManager {
                 .distinct()
                 .collect(Collectors.toList());
 
-        List<String> methodList = actions.stream()
-                .map(Method::getName)
-                .distinct()
-                .collect(Collectors.toList());
+        TableColumn<ActionData, String> objectColumn = new TableColumn<>("Object");
+        objectColumn.setCellFactory(ComboBoxTableCell.forTableColumn(FXCollections.observableArrayList(objectList)));
+        objectColumn.setCellValueFactory(new PropertyValueFactory<>("object"));
+        objectColumn.setOnEditCommit(event -> {
+            ActionData actionData = event.getRowValue();
+            String newObject = event.getNewValue();
+            actionData.setObject(newObject);
 
-        addComboBoxColumn(newTableView, "Object", objectList, "object");
-        addComboBoxColumn(newTableView, "Method", methodList, "method");
-        addColumn(newTableView, "Description", "description");
-        addColumn(newTableView, "Input", "input");
+            // Update methods dropdown based on selected object
+            filterMethodsDropdown(newTableView, actionData, newObject);
+        });
+        objectColumn.setEditable(true);
 
-        actions.forEach(action -> {
-            Action annotation = action.getAnnotation(Action.class);
-            newTableView.getItems().add(new ActionData(annotation.object().toString(), annotation.desc(), action.getName(), annotation.input()));
+        TableColumn<ActionData, String> methodColumn = new TableColumn<>("Method");
+        methodColumn.setCellFactory(column -> {
+            ComboBoxTableCell<ActionData, String> cell = new ComboBoxTableCell<>();
+            cell.setEditable(true);
+            cell.setOnMouseClicked(event -> {
+                if (!cell.isEmpty()) {
+                    String selectedObject = cell.getTableView().getItems().get(cell.getIndex()).getObject();
+                    List<String> relevantMethods = actions.stream()
+                            .filter(action -> action.getAnnotation(Action.class).object().toString().equals(selectedObject))
+                            .map(Method::getName)
+                            .distinct()
+                            .collect(Collectors.toList());
+                    cell.getItems().setAll(relevantMethods);
+                    cell.startEdit();  // Open dropdown on single click
+                }
+            });
+            return cell;
+        });
+        methodColumn.setCellValueFactory(new PropertyValueFactory<>("method"));
+        methodColumn.setOnEditCommit(event -> event.getRowValue().setMethod(event.getNewValue()));
+        methodColumn.setEditable(true);
+
+        TableColumn<ActionData, String> descriptionColumn = new TableColumn<>("Description");
+        descriptionColumn.setCellValueFactory(new PropertyValueFactory<>("description"));
+        descriptionColumn.setEditable(false);
+
+        TableColumn<ActionData, InputType> inputColumn = new TableColumn<>("Input");
+        inputColumn.setCellValueFactory(new PropertyValueFactory<>("input"));
+        inputColumn.setCellFactory(column -> new TableCell<ActionData, InputType>() {
+            final Button editButton = new Button("Edit");
+
+            {
+                editButton.setOnAction(event -> {
+                    ActionData actionData = getTableView().getItems().get(getIndex());
+                    openEditPopup(actionData);
+                });
+            }
+
+            @Override
+            protected void updateItem(InputType item, boolean empty) {
+                super.updateItem(item, empty);
+                if (empty) {
+                    setGraphic(null);
+                } else {
+                    setGraphic(editButton);
+                }
+            }
         });
 
-        tableViewMap.put(name, newTableView);
+        newTableView.setEditable(true);
+        newTableView.getColumns().addAll(objectColumn, methodColumn, descriptionColumn, inputColumn);
 
+        tableViewMap.put(name, newTableView);
         return newTableView;
     }
 
@@ -71,6 +122,76 @@ public class TableManager {
         column.setCellValueFactory(new PropertyValueFactory<>(property));
         column.setSortable(false);
         tableView.getColumns().add(column);
+    }
+
+    private void filterMethodsDropdown(TableView<ActionData> tableView, ActionData actionData, String newObject) {
+        List<String> relevantMethods = actions.stream()
+                .filter(action -> action.getAnnotation(Action.class).object().toString().equals(newObject))
+                .map(Method::getName)
+                .distinct()
+                .collect(Collectors.toList());
+
+        for (ActionData item : tableView.getItems()) {
+            if (item == actionData) {
+                item.setMethod(""); // Clear the method selection
+            }
+        }
+
+        TableColumn<ActionData, String> methodColumn = (TableColumn<ActionData, String>) tableView.getColumns().stream()
+                .filter(column -> column.getText().equals("Method"))
+                .findFirst()
+                .orElse(null);
+
+        if (methodColumn != null) {
+            methodColumn.setCellFactory(column -> {
+                ComboBoxTableCell<ActionData, String> cell = new ComboBoxTableCell<>(FXCollections.observableArrayList(relevantMethods));
+                cell.setEditable(true);
+                cell.setOnMouseClicked(event -> cell.startEdit());  // Open dropdown on single click
+                return cell;
+            });
+        }
+    }
+
+    private void openEditPopup(ActionData actionData) {
+        Stage popupStage = new Stage();
+        popupStage.initModality(Modality.APPLICATION_MODAL);
+        popupStage.setTitle("Edit Input");
+
+        TextArea inputArea = new TextArea(actionData.getInput().toString());  // Ensure InputType is converted to String
+
+        // Add key event handler to handle Ctrl + /
+        inputArea.addEventFilter(KeyEvent.KEY_PRESSED, event -> {
+            if (event.isControlDown() && event.getCode() == KeyCode.SLASH) {
+                String text = inputArea.getText();
+                if (actionData.getInput() == InputType.XML) {
+                    if (text.startsWith("<!--") && text.endsWith("-->")) {
+                        text = text.substring(4, text.length() - 3).trim();
+                    } else {
+                        text = "<!--" + text + "-->";
+                    }
+                } else if (actionData.getInput() == InputType.JSON) {
+                    if (text.startsWith("/*") && text.endsWith("*/")) {
+                        text = text.substring(2, text.length() - 2).trim();
+                    } else {
+                        text = "/*" + text + "*/";
+                    }
+                }
+                inputArea.setText(text);
+                event.consume();
+            }
+        });
+
+        Button saveButton = new Button("Save");
+        saveButton.setOnAction(event -> {
+            actionData.setInput(InputType.valueOf(inputArea.getText()));  // Convert the input back to InputType
+            popupStage.close();
+        });
+
+        VBox popupVBox = new VBox(10, new Label("Edit Input (XML/JSON)"), inputArea, saveButton);
+        popupVBox.setPadding(new Insets(10));
+        Scene popupScene = new Scene(popupVBox, 400, 300);
+        popupStage.setScene(popupScene);
+        popupStage.showAndWait();
     }
 
     public VBox createCommonTableViewLayout(TableView<ActionData> tableView, String caption) {
