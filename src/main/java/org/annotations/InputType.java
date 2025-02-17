@@ -2,5 +2,6 @@ package org.annotations;
 
 public enum InputType {
     YES,
-    NO
+    NO,
+    NONE
 }

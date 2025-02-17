@@ -3,6 +3,7 @@ package org.automonius;
 import javafx.application.Application;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
+import javafx.scene.Node;
 import javafx.scene.Scene;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.TableView;
@@ -11,6 +12,7 @@ import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
 import org.annotations.ObjectType;
 
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 public class MainController extends Application {
@@ -23,11 +25,17 @@ public class MainController extends Application {
     private ComboBox<ObjectType> objectTypeComboBox;
 
     public MainController(boolean loadProject) {
+        // Initialize the TableManager
+        TableManager tableManager = new TableManager();
+
+        // Initialize the TableViewComponent
         tableViewComponent = new TableViewComponent(loadProject);
+
         mainContainer = new VBox();
 
-        testPlanTreeTableViewComponent = new TreeTableViewComponent(loadProject, tableViewComponent, mainContainer);
-        reusableComponentTreeTableViewComponent = new TreeTableViewComponent(loadProject, tableViewComponent, mainContainer);
+        // Initialize the TreeTableViewComponent with the initialized TableManager
+        testPlanTreeTableViewComponent = new TreeTableViewComponent(loadProject, tableManager, mainContainer);
+        reusableComponentTreeTableViewComponent = new TreeTableViewComponent(loadProject, tableManager, mainContainer);
 
         // Add TableView1 to the main container initially
         initializeTableView1();
@@ -39,12 +47,28 @@ public class MainController extends Application {
         objectTypeComboBox.setOnAction(event -> updateTableView1());
 
         VBox tableView1Box = tableViewComponent.createTableView1();
-        tableView1 = (TableView<ActionData>) tableView1Box.getChildren().get(2);  // Assuming TableView is the third child in the VBox
+        tableView1 = findTableView(tableView1Box);
+
+        if (tableView1 == null) {
+            throw new IndexOutOfBoundsException("TableView not found in VBox");
+        }
 
         // Add ComboBox and TableView1 to mainContainer
         mainContainer.getChildren().addAll(objectTypeComboBox, tableView1Box);
 
         updateTableView1();
+    }
+
+    private TableView<ActionData> findTableView(VBox vbox) {
+        for (Node node : vbox.getChildren()) {
+            if (node instanceof TableView<?>) {
+                TableView<?> tableView = (TableView<?>) node;
+                if (tableView.getItems().isEmpty() || tableView.getItems().get(0) instanceof ActionData) {
+                    return (TableView<ActionData>) tableView;
+                }
+            }
+        }
+        return null;
     }
 
     private void updateTableView1() {

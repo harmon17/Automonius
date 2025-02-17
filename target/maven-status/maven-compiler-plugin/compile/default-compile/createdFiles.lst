@@ -3,8 +3,11 @@ org\annotations\ObjectType.class
 org\automonius\ExecutionPane.class
 org\automonius\TestStep.class
 org\Commands\SampleCommands.class
+org\automonius\UIManager.class
 org\automonius\MenuBarComponent.class
 org\automonius\LayoutComponent.class
+org\automonius\TableManager.class
+org\automonius\TreeTableViewManager.class
 org\utils\ActionDiscovery.class
 org\automonius\MainController.class
 org\automonius\TableViewComponent.class
@@ -13,7 +16,6 @@ org\automonius\MainUI.class
 org\annotations\InputType.class
 org\automonius\TreeTableViewComponent.class
 org\automonius\Main.class
-org\automonius\TableViewComponent$1.class
 org\automonius\CustomTextField.class
 org\automonius\ActionData.class
 org\automonius\Main$2.class

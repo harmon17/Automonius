@@ -20,6 +20,8 @@ import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
 import javafx.util.Duration;
 
+import java.util.Objects;
+
 public class LayoutComponent extends Application {
 
     private Scene mainScene;
@@ -55,11 +57,14 @@ public class LayoutComponent extends Application {
     public Parent createMainLayout(boolean loadProject) {
         mainLayout = createLayout(loadProject);
 
+        // Initialize the TableManager
+        TableManager tableManager = new TableManager();
+
         // Initialize the TableViewComponent
         TableViewComponent tableViewComponent = new TableViewComponent(loadProject);
 
-        // Initialize the TreeTableViewComponent with the initialized TableViewComponent
-        TreeTableViewComponent treeTableViewComponent = new TreeTableViewComponent(loadProject, tableViewComponent, new VBox());
+        // Initialize the TreeTableViewComponent with the initialized TableManager
+        TreeTableViewComponent treeTableViewComponent = new TreeTableViewComponent(loadProject, tableManager, new VBox());
 
         // Create the additional buttons with images
         Button button1 = createButtonWithImage("IMAGE/bank.png", 60, 60);
@@ -204,13 +209,14 @@ public class LayoutComponent extends Application {
             System.out.println("Loading image from: " + getClass().getClassLoader().getResource(imagePath));
 
             // Use ClassLoader to load the image resource
-            Image icon = new Image(getClass().getClassLoader().getResourceAsStream(imagePath));
+            Image icon = new Image(Objects.requireNonNull(getClass().getClassLoader().getResourceAsStream(imagePath)));
             ImageView imageView = new ImageView(icon);
             imageView.setFitWidth(width);
             imageView.setFitHeight(height);
             button.setGraphic(imageView);
         } catch (Exception e) {
             System.out.println("Error loading image: " + e.getMessage());
+            button.setText("Error loading image");
         }
         return button;
     }
