@@ -1,6 +1,7 @@
 package org.automonius;
 
 import javafx.beans.property.SimpleStringProperty;
+import javafx.geometry.Insets;
 import javafx.scene.control.*;
 import javafx.scene.layout.VBox;
 
@@ -25,8 +26,7 @@ public class TreeTableViewManager {
         this.treeTableView = new TreeTableView<>(rootItem);
 
         // Initialize the list for discovered actions
-        TableViewComponent tableViewComponent = new TableViewComponent(loadProject);
-        actions = tableViewComponent.getActions();
+        actions = tableManager.getActions();
 
         setupTreeTableView(loadProject);
     }
@@ -67,6 +67,21 @@ public class TreeTableViewManager {
                 }
             }
         });
+
+        // Select the default TableView1 on initial load
+        treeTableView.getSelectionModel().select(defaultTableView);
+        mainContainer.getChildren().clear();
+        mainContainer.getChildren().add(tableManager.createTableView1Layout());
+    }
+
+    public VBox createTreeTableView(boolean loadProject) {
+        VBox layout = new VBox(10);
+        layout.setPadding(new Insets(10));
+        layout.getChildren().addAll(
+                new Label("TreeTableView"),
+                treeTableView
+        );
+        return layout;
     }
 
     public TreeTableView<String> getTreeTableView() {

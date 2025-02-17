@@ -20,6 +20,15 @@ import java.util.stream.Collectors;
 public class TableManager {
     private final Map<String, TableView<ActionData>> tableViewMap = new HashMap<>();
     private final Stack<String> undoStack = new Stack<>();
+    private final List<Method> actions;
+
+    public TableManager(List<Method> actions) {
+        this.actions = actions;
+    }
+
+    public List<Method> getActions() {
+        return actions;
+    }
 
     public TableView<ActionData> createNewTableView(String name, List<Method> actions) {
         TableView<ActionData> newTableView = new TableView<>();
@@ -85,6 +94,11 @@ public class TableManager {
         VBox tableViewBox = new VBox(10, tableCaption, tableView, rowButtons);
         tableViewBox.setPadding(new Insets(10));
         return tableViewBox;
+    }
+
+    public VBox createTableView1Layout() {
+        TableView<ActionData> tableView1 = createNewTableView("TableView1", actions);
+        return createCommonTableViewLayout(tableView1, "TableView1");
     }
 
     public Map<String, TableView<ActionData>> getTableViewMap() {

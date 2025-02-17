@@ -8,7 +8,7 @@ import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
-import javafx.scene.control.MenuBar;
+import javafx.scene.control        .MenuBar;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.scene.layout.BorderPane;
@@ -19,7 +19,11 @@ import javafx.scene.layout.RowConstraints;
 import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
 import javafx.util.Duration;
+import org.Commands.SampleCommands;
+import org.utils.ActionDiscovery;
 
+import java.lang.reflect.Method;
+import java.util.List;
 import java.util.Objects;
 
 public class LayoutComponent extends Application {
@@ -35,11 +39,17 @@ public class LayoutComponent extends Application {
     private HBox topContainer;
     private TranslateTransition showTransition;
     private TranslateTransition hideTransition;
+    private TableManager tableManager;
+    private List<Method> actions;
 
     @Override
     public void start(Stage primaryStage) {
         this.primaryStage = primaryStage;
         primaryStage.setTitle("Button Navigation Example");
+
+        // Discover actions and create a centralized TableManager
+        actions = ActionDiscovery.discoverActions(SampleCommands.class);
+        tableManager = new TableManager(actions);
 
         // Create the main layout
         Parent mainLayout = createMainLayout(false);
@@ -57,14 +67,11 @@ public class LayoutComponent extends Application {
     public Parent createMainLayout(boolean loadProject) {
         mainLayout = createLayout(loadProject);
 
-        // Initialize the TableManager
-        TableManager tableManager = new TableManager();
-
         // Initialize the TableViewComponent
-        TableViewComponent tableViewComponent = new TableViewComponent(loadProject);
+        TableViewComponent tableViewComponent = new TableViewComponent(loadProject, tableManager);
 
-        // Initialize the TreeTableViewComponent with the initialized TableManager
-        TreeTableViewComponent treeTableViewComponent = new TreeTableViewComponent(loadProject, tableManager, new VBox());
+        // Initialize the TreeTableViewManager with the initialized TableManager
+        TreeTableViewManager treeTableViewManager = new TreeTableViewManager(loadProject, tableManager, new VBox());
 
         // Create the additional buttons with images
         Button button1 = createButtonWithImage("IMAGE/bank.png", 60, 60);
@@ -113,13 +120,13 @@ public class LayoutComponent extends Application {
 
         mainLayout.setTop(topContainer);
 
-        MainController mainController = new MainController(loadProject);
+        MainController mainController = new MainController(loadProject, tableManager);
         VBox mainContainer = mainController.getMainContainer();
         VBox objectRepositoryView = mainController.createObjectRepositoryView();
         VBox reusableComponentView = mainController.createReusableComponentTableView();
         VBox testPlanView = mainController.createTestPlanTableView();
         VBox tableView2Box = mainController.createTableView2();
-        VBox propertiesBox = mainController.createPropertiesView();
+//        VBox propertiesBox = mainController.createPropertiesView();
 
         ColumnConstraints cc1 = new ColumnConstraints();
         cc1.setPercentWidth(20);
@@ -138,7 +145,7 @@ public class LayoutComponent extends Application {
         bottomArea.getColumnConstraints().addAll(cc1, cc2, cc3);
         bottomArea.add(reusableComponentView, 0, 0);
         bottomArea.add(tableView2Box, 1, 0);
-        bottomArea.add(propertiesBox, 2, 0);
+//        bottomArea.add(propertiesBox, 2, 0);
 
         RowConstraints rc1 = new RowConstraints();
         rc1.setPercentHeight(50);

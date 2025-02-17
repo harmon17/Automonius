@@ -5,14 +5,14 @@ import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.scene.Node;
 import javafx.scene.Scene;
-import javafx.scene.control.ComboBox;
 import javafx.scene.control.TableView;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
 import org.annotations.ObjectType;
 
-import java.util.Optional;
+import java.lang.reflect.Method;
+import java.util.List;
 import java.util.stream.Collectors;
 
 public class MainController extends Application {
@@ -22,41 +22,33 @@ public class MainController extends Application {
     private final TableViewComponent tableViewComponent;
     private final VBox mainContainer;
     private TableView<ActionData> tableView1;
-    private ComboBox<ObjectType> objectTypeComboBox;
+    private final TableManager tableManager;
 
-    public MainController(boolean loadProject) {
-        // Initialize the TableManager
-        TableManager tableManager = new TableManager();
+    public MainController(boolean loadProject, TableManager tableManager) {
+        this.tableManager = tableManager;
 
-        // Initialize the TableViewComponent
-        tableViewComponent = new TableViewComponent(loadProject);
+        tableViewComponent = new TableViewComponent(loadProject, tableManager);
 
         mainContainer = new VBox();
 
-        // Initialize the TreeTableViewComponent with the initialized TableManager
         testPlanTreeTableViewComponent = new TreeTableViewComponent(loadProject, tableManager, mainContainer);
         reusableComponentTreeTableViewComponent = new TreeTableViewComponent(loadProject, tableManager, mainContainer);
 
-        // Add TableView1 to the main container initially
-        initializeTableView1();
+        // Comment out the initialization of TableView1
+        // initializeTableView1();
     }
 
     private void initializeTableView1() {
-        objectTypeComboBox = new ComboBox<>(FXCollections.observableArrayList(ObjectType.values()));
-        objectTypeComboBox.getSelectionModel().selectFirst();
-        objectTypeComboBox.setOnAction(event -> updateTableView1());
-
-        VBox tableView1Box = tableViewComponent.createTableView1();
+        mainContainer.getChildren().clear();  // Clear previous content
+        VBox tableView1Box = tableManager.createTableView1Layout();
         tableView1 = findTableView(tableView1Box);
 
         if (tableView1 == null) {
             throw new IndexOutOfBoundsException("TableView not found in VBox");
         }
 
-        // Add ComboBox and TableView1 to mainContainer
-        mainContainer.getChildren().addAll(objectTypeComboBox, tableView1Box);
-
-        updateTableView1();
+        // Add TableView1 to mainContainer
+        mainContainer.getChildren().add(tableView1Box);
     }
 
     private TableView<ActionData> findTableView(VBox vbox) {
@@ -69,16 +61,6 @@ public class MainController extends Application {
             }
         }
         return null;
-    }
-
-    private void updateTableView1() {
-        ObjectType selectedObjectType = objectTypeComboBox.getSelectionModel().getSelectedItem();
-        ObservableList<ActionData> filteredData = FXCollections.observableArrayList(
-                tableViewComponent.getTableView1Data().stream()
-                        .filter(action -> action.getObject().equals(selectedObjectType.toString()))
-                        .collect(Collectors.toList())
-        );
-        tableView1.setItems(filteredData);
     }
 
     public VBox getMainContainer() {
@@ -101,14 +83,13 @@ public class MainController extends Application {
         return tableViewComponent.createTableView2();
     }
 
-    public VBox createPropertiesView() {
-        return tableViewComponent.createPropertiesView();
-    }
+
 
     @Override
     public void start(Stage primaryStage) {
         BorderPane root = new BorderPane();
         root.setCenter(mainContainer);
+
 
         Scene scene = new Scene(root, 1200, 800);
         primaryStage.setScene(scene);
