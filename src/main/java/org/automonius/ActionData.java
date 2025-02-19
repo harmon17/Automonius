@@ -2,16 +2,20 @@ package org.automonius;
 
 import org.annotations.InputType;
 
+import java.util.HashMap;
+import java.util.Map;
+
 public class ActionData {
     private String object;
-    private String description;
     private String method;
+    private String description;
     private InputType input;
+    private final Map<String, String> additionalProperties = new HashMap<>();
 
-    public ActionData(String object, String description, String method, InputType input) {
+    public ActionData(String object, String method, String description, InputType input) {
         this.object = object;
-        this.description = description;
         this.method = method;
+        this.description = description;
         this.input = input;
     }
 
@@ -23,14 +27,6 @@ public class ActionData {
         this.object = object;
     }
 
-    public String getDescription() {
-        return description;
-    }
-
-    public void setDescription(String description) {
-        this.description = description;
-    }
-
     public String getMethod() {
         return method;
     }
@@ -39,11 +35,31 @@ public class ActionData {
         this.method = method;
     }
 
+    public String getDescription() {
+        return description;
+    }
+
+    public void setDescription(String description) {
+        this.description = description;
+    }
+
     public InputType getInput() {
         return input;
     }
 
     public void setInput(InputType input) {
         this.input = input;
+    }
+
+    public String getAdditionalProperty(String key) {
+        return additionalProperties.getOrDefault(key, "");
+    }
+
+    public void setAdditionalProperty(String key, String value) {
+        additionalProperties.put(key, value);
+    }
+
+    public Map<String, String> getAdditionalProperties() {
+        return additionalProperties;
     }
 }

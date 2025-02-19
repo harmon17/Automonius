@@ -1,11 +1,13 @@
 package org.automonius;
 
+import javafx.beans.property.SimpleStringProperty;
 import javafx.collections.FXCollections;
 import javafx.geometry.Insets;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
 import javafx.scene.control.cell.ComboBoxTableCell;
 import javafx.scene.control.cell.PropertyValueFactory;
+import javafx.scene.control.cell.TextFieldTableCell;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyEvent;
 import javafx.scene.layout.HBox;
@@ -23,6 +25,8 @@ public class TableManager {
     private final Map<String, TableView<ActionData>> tableViewMap = new HashMap<>();
     private final Stack<String> undoStack = new Stack<>();
     private final List<Method> actions;
+    private final List<TableColumn<ActionData, ?>> defaultColumns = new ArrayList<>();
+    private final List<TableColumn<ActionData, ?>> additionalColumns = new ArrayList<>();
 
     public TableManager(List<Method> actions) {
         this.actions = actions;
@@ -52,6 +56,7 @@ public class TableManager {
             filterMethodsDropdown(newTableView, actionData, newObject);
         });
         objectColumn.setEditable(true);
+        defaultColumns.add(objectColumn);
 
         TableColumn<ActionData, String> methodColumn = new TableColumn<>("Method");
         methodColumn.setCellFactory(column -> {
@@ -74,36 +79,52 @@ public class TableManager {
         methodColumn.setCellValueFactory(new PropertyValueFactory<>("method"));
         methodColumn.setOnEditCommit(event -> event.getRowValue().setMethod(event.getNewValue()));
         methodColumn.setEditable(true);
+        defaultColumns.add(methodColumn);
 
         TableColumn<ActionData, String> descriptionColumn = new TableColumn<>("Description");
         descriptionColumn.setCellValueFactory(new PropertyValueFactory<>("description"));
-        descriptionColumn.setEditable(false);
+        descriptionColumn.setCellFactory(TextFieldTableCell.forTableColumn());
+        descriptionColumn.setOnEditCommit(event -> event.getRowValue().setDescription(event.getNewValue()));
+        descriptionColumn.setEditable(true);
+        defaultColumns.add(descriptionColumn);
 
-        TableColumn<ActionData, InputType> inputColumn = new TableColumn<>("Input");
-        inputColumn.setCellValueFactory(new PropertyValueFactory<>("input"));
-        inputColumn.setCellFactory(column -> new TableCell<ActionData, InputType>() {
+        TableColumn<ActionData, String> inputColumn = new TableColumn<>("Input");
+        inputColumn.setCellValueFactory(cellData -> {
+            String input = cellData.getValue().getInput().toString();
+            if (InputType.NONE.toString().equals(input)) {
+                input = cellData.getValue().getAdditionalProperty("Input");
+            }
+            return new SimpleStringProperty(input);
+        });
+        inputColumn.setCellFactory(column -> new TableCell<ActionData, String>() {
             final Button editButton = new Button("Edit");
 
             {
                 editButton.setOnAction(event -> {
                     ActionData actionData = getTableView().getItems().get(getIndex());
-                    openEditPopup(actionData);
+                    openEditPopup(actionData, getTableView());
                 });
             }
 
             @Override
-            protected void updateItem(InputType item, boolean empty) {
+            protected void updateItem(String item, boolean empty) {
                 super.updateItem(item, empty);
                 if (empty) {
                     setGraphic(null);
                 } else {
+                    setText(item); // Ensure the input value is displayed in the cell
                     setGraphic(editButton);
                 }
             }
         });
+        defaultColumns.add(inputColumn);
 
         newTableView.setEditable(true);
         newTableView.getColumns().addAll(objectColumn, methodColumn, descriptionColumn, inputColumn);
+
+        // Add a single initial row
+        ActionData initialRow = new ActionData("", "", "", InputType.NONE);
+        newTableView.getItems().add(initialRow);
 
         tableViewMap.put(name, newTableView);
         return newTableView;
@@ -114,14 +135,52 @@ public class TableManager {
         column.setCellFactory(ComboBoxTableCell.forTableColumn(FXCollections.observableArrayList(options)));
         column.setCellValueFactory(new PropertyValueFactory<>(property));
         column.setSortable(false);
+        additionalColumns.add(column);
         tableView.getColumns().add(column);
     }
 
-    private void addColumn(TableView<ActionData> tableView, String header, String property) {
+    private void addColumn(TableView<ActionData> tableView, String header) {
         TableColumn<ActionData, String> column = new TableColumn<>(header);
-        column.setCellValueFactory(new PropertyValueFactory<>(property));
+        column.setCellValueFactory(cellData -> new SimpleStringProperty(cellData.getValue().getAdditionalProperty(header)));
+        column.setCellFactory(TextFieldTableCell.forTableColumn());
+        column.setOnEditCommit(event -> event.getRowValue().setAdditionalProperty(header, event.getNewValue()));
         column.setSortable(false);
+        addColumnContextMenu(tableView, column);
+        additionalColumns.add(column);
         tableView.getColumns().add(column);
+    }
+
+    private void addColumnContextMenu(TableView<ActionData> tableView, TableColumn<ActionData, ?> column) {
+        ContextMenu contextMenu = new ContextMenu();
+        MenuItem deleteItem = new MenuItem("Delete Column");
+        deleteItem.setOnAction(event -> tableView.getColumns().remove(column));
+        contextMenu.getItems().add(deleteItem);
+
+        MenuItem renameItem = new MenuItem("Rename Column");
+        renameItem.setOnAction(event -> openRenamePopup(column));
+        contextMenu.getItems().add(renameItem);
+
+        column.setContextMenu(contextMenu);
+    }
+
+    private void openRenamePopup(TableColumn<ActionData, ?> column) {
+        Stage popupStage = new Stage();
+        popupStage.initModality(Modality.APPLICATION_MODAL);
+        popupStage.setTitle("Rename Column");
+
+        TextField renameField = new TextField(column.getText());
+
+        Button saveButton = new Button("Save");
+        saveButton.setOnAction(event -> {
+            column.setText(renameField.getText());
+            popupStage.close();
+        });
+
+        VBox popupVBox = new VBox(10, new Label("Rename Column"), renameField, saveButton);
+        popupVBox.setPadding(new Insets(10));
+        Scene popupScene = new Scene(popupVBox, 300, 150);
+        popupStage.setScene(popupScene);
+        popupStage.showAndWait();
     }
 
     private void filterMethodsDropdown(TableView<ActionData> tableView, ActionData actionData, String newObject) {
@@ -152,7 +211,7 @@ public class TableManager {
         }
     }
 
-    private void openEditPopup(ActionData actionData) {
+    private void openEditPopup(ActionData actionData, TableView<ActionData> tableView) {
         Stage popupStage = new Stage();
         popupStage.initModality(Modality.APPLICATION_MODAL);
         popupStage.setTitle("Edit Input");
@@ -183,8 +242,16 @@ public class TableManager {
 
         Button saveButton = new Button("Save");
         saveButton.setOnAction(event -> {
-            actionData.setInput(InputType.valueOf(inputArea.getText()));  // Convert the input back to InputType
+            String inputText = inputArea.getText();
+            try {
+                actionData.setInput(InputType.valueOf(inputText.toUpperCase()));
+            } catch (IllegalArgumentException e) {
+                // Handle invalid enum constant by treating it as a custom string
+                actionData.setInput(InputType.NONE);
+                actionData.setAdditionalProperty("Input", inputText);
+            }
             popupStage.close();
+            tableView.refresh();  // Refresh the table to display the updated input value
         });
 
         VBox popupVBox = new VBox(10, new Label("Edit Input (XML/JSON)"), inputArea, saveButton);
@@ -199,6 +266,10 @@ public class TableManager {
 
         Button addRowButton = new Button("Add Row");
         Button deleteRowButton = new Button("Delete Row");
+        Button addColumnButton = new Button("Add Column");
+        Button deleteColumnButton = new Button("Delete Column");
+        Button printValuesButton = new Button("Print Values");
+
         addRowButton.setOnAction(e -> {
             ActionData newRow = new ActionData("", "", "", InputType.NONE);
             tableView.getItems().add(newRow);
@@ -206,12 +277,43 @@ public class TableManager {
 
         deleteRowButton.setOnAction(e -> {
             ActionData selectedItem = tableView.getSelectionModel().getSelectedItem();
-            if (selectedItem != null && tableView.getItems().size() > 1) {
+            if (selectedItem != null) {
                 tableView.getItems().remove(selectedItem);
             }
         });
 
-        HBox rowButtons = new HBox(10, addRowButton, deleteRowButton);
+        addColumnButton.setOnAction(e -> {
+            String columnName = "NewColumn" + (additionalColumns.size() + 1);
+            addColumn(tableView, columnName);
+        });
+
+        deleteColumnButton.setOnAction(e -> {
+            if (!additionalColumns.isEmpty()) {
+                TableColumn<ActionData, ?> lastAddedColumn = additionalColumns.remove(additionalColumns.size() - 1);
+                tableView.getColumns().remove(lastAddedColumn);
+            }
+        });
+
+        printValuesButton.setOnAction(e -> {
+            for (ActionData actionData : tableView.getItems()) {
+                System.out.println("Object: " + actionData.getObject());
+                System.out.println("Method: " + actionData.getMethod());
+                System.out.println("Description: " + actionData.getDescription());
+                String input = actionData.getInput().toString();
+                if (InputType.NONE.toString().equals(input)) {
+                    input = actionData.getAdditionalProperty("Input");
+                }
+                System.out.println("Input: " + input);
+                for (Map.Entry<String, String> entry : actionData.getAdditionalProperties().entrySet()) {
+                    if (!"Input".equals(entry.getKey())) {
+                        System.out.println(entry.getKey() + ": " + entry.getValue());
+                    }
+                }
+                System.out.println("-----");
+            }
+        });
+
+        HBox rowButtons = new HBox(10, addRowButton, deleteRowButton, addColumnButton, deleteColumnButton, printValuesButton);
         VBox tableViewBox = new VBox(10, tableCaption, tableView, rowButtons);
         tableViewBox.setPadding(new Insets(10));
         return tableViewBox;
