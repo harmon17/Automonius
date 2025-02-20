@@ -217,26 +217,27 @@ public class TableManager {
         popupStage.setTitle("Edit Input");
 
         String inputText = actionData.getInput() != InputType.NONE ? actionData.getInput().toString() : actionData.getAdditionalProperty("Input");
-        TextArea inputArea = new TextArea(inputText); // Ensure InputType is converted to String
+        TextArea inputArea = new TextArea(inputText);
 
-        addCommentHandler(inputArea, inputText); // Attach the comment handler
+        inputArea.addEventFilter(KeyEvent.KEY_PRESSED, event -> {
+            if (event.isControlDown() && event.getCode() == KeyCode.SLASH) {
+                String selectedText = inputArea.getSelectedText();
+                InputType currentInputType = determineInputType(inputArea.getText());
+                String commentedText = toggleComment(selectedText, currentInputType);
+                int start = inputArea.getSelection().getStart();
+                int end = inputArea.getSelection().getEnd();
+                inputArea.replaceText(start, end, commentedText);
+                inputArea.selectRange(start, start + commentedText.length());
+                event.consume();
+            }
+        });
 
         Button saveButton = new Button("Save");
         saveButton.setOnAction(event -> {
             String editedText = inputArea.getText();
-            if (actionData.getInput() == InputType.XML || actionData.getInput() == InputType.JSON) {
-                actionData.setAdditionalProperty("Input", editedText);
-                actionData.setInput(InputType.NONE); // Set to NONE if it’s custom text
-            } else {
-                try {
-                    actionData.setInput(InputType.valueOf(editedText.toUpperCase()));
-                } catch (IllegalArgumentException e) {
-                    actionData.setInput(InputType.NONE);
-                    actionData.setAdditionalProperty("Input", editedText);
-                }
-            }
+            actionData.setAdditionalProperty("Input", editedText);
+            tableView.refresh();
             popupStage.close();
-            tableView.refresh(); // Refresh the table to display the updated input value
         });
 
         VBox popupVBox = new VBox(10, new Label("Edit Input (XML/JSON)"), inputArea, saveButton);
@@ -244,35 +245,23 @@ public class TableManager {
         Scene popupScene = new Scene(popupVBox, 400, 300);
         popupStage.setScene(popupScene);
         popupStage.showAndWait();
+
     }
 
-    private void addCommentHandler(TextArea inputArea, String inputText) {
-        inputArea.addEventFilter(KeyEvent.KEY_PRESSED, event -> {
-            if (event.isControlDown() && event.getCode() == KeyCode.SLASH) {
-                int start = inputArea.getSelection().getStart();
-                int end = inputArea.getSelection().getEnd();
-                String selectedText = inputArea.getSelectedText();
-                String commentedText = selectedText;
 
-                InputType currentInputType = determineInputType(inputText);
-
-                if (currentInputType == InputType.XML && selectedText.startsWith("<!--") && selectedText.endsWith("-->")) {
-                    commentedText = selectedText.substring(4, selectedText.length() - 3).trim();
-                } else if (currentInputType == InputType.JSON && selectedText.startsWith("/") && selectedText.endsWith("/")) {
-                    commentedText = selectedText.substring(2, selectedText.length() - 2).trim();
-                } else {
-                    if (currentInputType == InputType.XML) {
-                        commentedText = "<!--" + selectedText + "-->";
-                    } else if (currentInputType == InputType.JSON) {
-                        commentedText = "/" + selectedText + "/";
-                    }
-                }
-
-                inputArea.replaceText(start, end, commentedText);
-                inputArea.selectRange(start, start + commentedText.length()); // Keep the selection after replacement
-                event.consume();
+    private String toggleComment(String selectedText, InputType inputType) {
+        if (inputType == InputType.XML && selectedText.startsWith("<!--") && selectedText.endsWith("-->")) {
+            return selectedText.substring(4, selectedText.length() - 3).trim();
+        } else if (inputType == InputType.JSON && selectedText.startsWith("/") && selectedText.endsWith("/")) {
+            return selectedText.substring(2, selectedText.length() - 2).trim();
+        } else {
+            if (inputType == InputType.XML) {
+                return "<!--" + selectedText + "-->";
+            } else if (inputType == InputType.JSON) {
+                return "/" + selectedText + "/";
             }
-        });
+        }
+        return selectedText;
     }
 
     private InputType determineInputType(String text) {
@@ -285,6 +274,7 @@ public class TableManager {
             return InputType.NONE;
         }
     }
+
 
     public VBox createCommonTableViewLayout(TableView<ActionData> tableView, String caption) {
         Label tableCaption = new Label(caption);
