@@ -8,7 +8,7 @@ import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
-import javafx.scene.control        .MenuBar;
+import javafx.scene.control.MenuBar;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.scene.layout.BorderPane;
@@ -21,7 +21,6 @@ import javafx.stage.Stage;
 import javafx.util.Duration;
 import org.Commands.SampleCommands;
 import org.utils.ActionDiscovery;
-
 import java.lang.reflect.Method;
 import java.util.List;
 import java.util.Objects;
@@ -41,92 +40,54 @@ public class LayoutComponent extends Application {
     private TranslateTransition hideTransition;
     private TableManager tableManager;
     private List<Method> actions;
+    private TreeTableViewComponent treeTableViewComponent;
 
     @Override
     public void start(Stage primaryStage) {
         this.primaryStage = primaryStage;
         primaryStage.setTitle("Button Navigation Example");
 
-        // Discover actions and create a centralized TableManager
         actions = ActionDiscovery.discoverActions(SampleCommands.class);
         tableManager = new TableManager(actions);
 
-        // Create the main layout
         Parent mainLayout = createMainLayout(false);
         mainScene = new Scene(mainLayout, 800, 600);
 
-        // Create the ExecutionPane layout
         executionLayout = createExecutionLayout();
         executionScene = new Scene(executionLayout, 800, 600);
 
-        // Set the initial scene to the main layout
         primaryStage.setScene(mainScene);
         primaryStage.show();
     }
 
     public Parent createMainLayout(boolean loadProject) {
+        if (treeTableViewComponent == null) {
+            treeTableViewComponent = TreeTableViewComponent.getInstance();
+            treeTableViewComponent.init(loadProject, tableManager, new VBox());
+        }
         mainLayout = createLayout(loadProject);
-
-        // Initialize the TableViewComponent
-        TableViewComponent tableViewComponent = new TableViewComponent(loadProject, tableManager);
-
-        // Initialize the TreeTableViewManager with the initialized TableManager
-        TreeTableViewManager treeTableViewManager = new TreeTableViewManager(loadProject, tableManager, new VBox());
-
-        // Create the additional buttons with images
-        Button button1 = createButtonWithImage("IMAGE/bank.png", 60, 60);
-        Button button2 = createButtonWithImage("IMAGE/presentation.png", 60, 60);
-        Button button3 = createButtonWithImage("IMAGE/settings.png", 60, 60);
-
-        // Event listener to switch to the ExecutionPane when the middle button is clicked
-        button2.setOnAction(e -> switchToExecutionPane());
-
-        // Event listener to switch to the main layout when the top button is clicked
-        button1.setOnAction(e -> switchToMainLayout());
-
-        // Layout for the additional buttons
-        buttonLayout = new VBox(10, button1, button2, button3);
-        buttonLayout.setAlignment(Pos.CENTER_LEFT);
-        buttonLayout.setPadding(new Insets(10));
-        buttonLayout.setStyle("-fx-background-color: #f0f0f0;");
-        buttonLayout.setPrefWidth(80); // Set the preferred width to fit the buttons
-
-        // Initially hide buttons
-        areButtonsVisible = false;
-        buttonLayout.setTranslateX(-buttonLayout.getPrefWidth());
-        buttonLayout.setVisible(false);
-
-        // Create slide in/out transitions
-        showTransition = new TranslateTransition(Duration.millis(300), buttonLayout);
-        hideTransition = new TranslateTransition(Duration.millis(300), buttonLayout);
-
         return mainLayout;
     }
 
     public BorderPane createLayout(boolean loadProject) {
         mainLayout = new BorderPane();
-
         menuBarComponent = new MenuBarComponent();
         MenuBar menuBar = menuBarComponent.createMenuBar(this);
 
-        // Create the toggle button with an image
         Button toggleButton = createButtonWithImage("IMAGE/toggle.png", 20, 20);
         toggleButton.setOnAction(e -> toggleButtonsVisibility());
 
-        // Add the toggle button and the menu bar to a horizontal box
         topContainer = new HBox(10, toggleButton, menuBar);
         topContainer.setAlignment(Pos.CENTER_LEFT);
         topContainer.setPadding(new Insets(10));
-
         mainLayout.setTop(topContainer);
 
         MainController mainController = new MainController(loadProject, tableManager);
         VBox mainContainer = mainController.getMainContainer();
         VBox objectRepositoryView = mainController.createObjectRepositoryView();
-        VBox reusableComponentView = mainController.createReusableComponentTableView();
+//        VBox reusableComponentView = mainController.createReusableComponentTableView();
         VBox testPlanView = mainController.createTestPlanTableView();
-        VBox tableView2Box = mainController.createTableView2();
-//        VBox propertiesBox = mainController.createPropertiesView();
+//        VBox tableView2Box = mainController.createTableView2();
 
         ColumnConstraints cc1 = new ColumnConstraints();
         cc1.setPercentWidth(20);
@@ -143,9 +104,8 @@ public class LayoutComponent extends Application {
 
         GridPane bottomArea = new GridPane();
         bottomArea.getColumnConstraints().addAll(cc1, cc2, cc3);
-        bottomArea.add(reusableComponentView, 0, 0);
-        bottomArea.add(tableView2Box, 1, 0);
-//        bottomArea.add(propertiesBox, 2, 0);
+//        bottomArea.add(reusableComponentView, 0, 0);
+//        bottomArea.add(tableView2Box, 1, 0);
 
         RowConstraints rc1 = new RowConstraints();
         rc1.setPercentHeight(50);
@@ -159,23 +119,39 @@ public class LayoutComponent extends Application {
 
         mainLayout.setCenter(mainArea);
 
-        // Initially hide buttons
-        mainLayout.setLeft(null);
+        buttonLayout = new VBox(10);
+        buttonLayout.setAlignment(Pos.CENTER_LEFT);
+        buttonLayout.setPadding(new Insets(10));
+        buttonLayout.setStyle("-fx-background-color: #f0f0f0;");
+        buttonLayout.setPrefWidth(80);
+
+        Button button1 = createButtonWithImage("IMAGE/bank.png", 60, 60);
+        Button button2 = createButtonWithImage("IMAGE/presentation.png", 60, 60);
+        Button button3 = createButtonWithImage("IMAGE/settings.png", 60, 60);
+
+        button2.setOnAction(e -> switchToExecutionPane());
+        button1.setOnAction(e -> switchToMainLayout());
+
+        buttonLayout.getChildren().addAll(button1, button2, button3);
+
+        areButtonsVisible = false;
+        buttonLayout.setTranslateX(-buttonLayout.getPrefWidth());
+        buttonLayout.setVisible(false);
+
+        showTransition = new TranslateTransition(Duration.millis(300), buttonLayout);
+        hideTransition = new TranslateTransition(Duration.millis(300), buttonLayout);
 
         return mainLayout;
     }
 
     public BorderPane createExecutionLayout() {
         executionLayout = new BorderPane();
-
         menuBarComponent = new MenuBarComponent();
         MenuBar menuBar = menuBarComponent.createMenuBar(this);
 
-        // Add the toggle button and the menu bar to a horizontal box
         HBox executionTopContainer = new HBox(10, topContainer.getChildren().get(0), menuBar);
         executionTopContainer.setAlignment(Pos.CENTER_LEFT);
         executionTopContainer.setPadding(new Insets(10));
-
         executionLayout.setTop(executionTopContainer);
 
         VBox executionContent = new VBox();
@@ -183,8 +159,7 @@ public class LayoutComponent extends Application {
         executionContent.setSpacing(10);
         executionContent.setPadding(new Insets(10));
 
-        // Add components to executionContent
-        executionContent.getChildren().add(new Label("Execution Content")); // Example content
+        executionContent.getChildren().add(new Label("Execution Content"));
 
         executionLayout.setCenter(executionContent);
 
@@ -212,10 +187,6 @@ public class LayoutComponent extends Application {
     private Button createButtonWithImage(String imagePath, double width, double height) {
         Button button = new Button();
         try {
-            // Log the image path
-            System.out.println("Loading image from: " + getClass().getClassLoader().getResource(imagePath));
-
-            // Use ClassLoader to load the image resource
             Image icon = new Image(Objects.requireNonNull(getClass().getClassLoader().getResourceAsStream(imagePath)));
             ImageView imageView = new ImageView(icon);
             imageView.setFitWidth(width);

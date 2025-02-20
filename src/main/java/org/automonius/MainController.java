@@ -31,11 +31,14 @@ public class MainController extends Application {
 
         mainContainer = new VBox();
 
-        testPlanTreeTableViewComponent = new TreeTableViewComponent(loadProject, tableManager, mainContainer);
-        reusableComponentTreeTableViewComponent = new TreeTableViewComponent(loadProject, tableManager, mainContainer);
+        testPlanTreeTableViewComponent = TreeTableViewComponent.getInstance();
+        testPlanTreeTableViewComponent.init(loadProject, tableManager, mainContainer);
+
+        reusableComponentTreeTableViewComponent = TreeTableViewComponent.getInstance();
+        reusableComponentTreeTableViewComponent.init(loadProject, tableManager, mainContainer);
 
         // Comment out the initialization of TableView1
-        // initializeTableView1();
+         initializeTableView1();
     }
 
     private void initializeTableView1() {
@@ -71,17 +74,17 @@ public class MainController extends Application {
         return testPlanTreeTableViewComponent.createTreeTableView(false);
     }
 
-    public VBox createReusableComponentTableView() {
-        return reusableComponentTreeTableViewComponent.createTreeTableView(true);
-    }
+//    public VBox createReusableComponentTableView() {
+//        return reusableComponentTreeTableViewComponent.createTreeTableView(true);
+//    }
 
     public VBox createTestPlanTableView() {
         return testPlanTreeTableViewComponent.createTreeTableView(true);
     }
 
-    public VBox createTableView2() {
-        return tableViewComponent.createTableView2();
-    }
+//    public VBox createTableView2() {
+//        return tableViewComponent.createTableView2();
+//    }
 
 
 

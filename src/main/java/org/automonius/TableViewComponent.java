@@ -1,6 +1,7 @@
 package org.automonius;
 
 import javafx.collections.FXCollections;
+import javafx.collections.ObservableList;
 import javafx.geometry.Insets;
 import javafx.scene.control.*;
 import javafx.scene.control.cell.ComboBoxTableCell;
@@ -23,62 +24,67 @@ public class TableViewComponent {
         this.actions = tableManager.getActions();
     }
 
-    public VBox createTableView2() {
-        TableView<ActionData> tableView2 = tableManager.createNewTableView("TableView2", actions);
-
-        Button addRowButton = new Button("Add Row");
-        Button deleteRowButton = new Button("Delete Row");
-        addRowButton.setOnAction(e -> {
-            ActionData newRow = new ActionData("", "", "", InputType.NONE);  // Initial empty row
-            tableView2.getItems().add(newRow);
-        });
-
-        deleteRowButton.setOnAction(e -> {
-            ActionData selectedItem = tableView2.getSelectionModel().getSelectedItem();
-            if (selectedItem != null && tableView2.getItems().size() > 1) {
-                tableView2.getItems().remove(selectedItem);
-            }
-        });
-
-        HBox rowButtons = new HBox(10, addRowButton, deleteRowButton);
-        VBox tableView2Box = new VBox(10, new Label("TableView2"), tableView2, rowButtons);
-        tableView2Box.setPadding(new Insets(10));
-        return tableView2Box;
-    }
+//    public VBox createTableView2() {
+//        TableView<ActionData> tableView2 = tableManager.createNewTableView("TableView2", actions);
+//        Button addRowButton = new Button("Add Row");
+//        Button deleteRowButton = new Button("Delete Row");
+//
+//        addRowButton.setOnAction(e -> {
+//            ActionData newRow = new ActionData("", "", "", InputType.NONE);
+//            tableView2.getItems().add(newRow);
+//        });
+//
+//        deleteRowButton.setOnAction(e -> {
+//            ActionData selectedItem = tableView2.getSelectionModel().getSelectedItem();
+//            if (selectedItem != null && tableView2.getItems().size() > 1) {
+//                tableView2.getItems().remove(selectedItem);
+//            }
+//        });
+//
+//        HBox rowButtons = new HBox(10, addRowButton, deleteRowButton);
+//        VBox tableView2Box = new VBox(10, new Label("TableView2"), tableView2, rowButtons);
+//        tableView2Box.setPadding(new Insets(10));
+//
+//        return tableView2Box;
+//    }
 
     public VBox createCommonTableViewLayout(String tableName) {
         TableView<ActionData> tableView = tableManager.getTableViewMap().get(tableName);
 
         // Create columns for Object and Method with empty cells initially
-        List<String> objectList = actions.stream()
-                .map(action -> action.getAnnotation(Action.class).object().toString())
-                .distinct()
-                .collect(Collectors.toList());
+        ObservableList<String> objectList = FXCollections.observableArrayList(
+                actions.stream()
+                        .map(action -> action.getAnnotation(Action.class).object().toString())
+                        .distinct()
+                        .collect(Collectors.toList())
+        );
 
-        List<String> methodList = actions.stream()
-                .map(Method::getName)
-                .distinct()
-                .collect(Collectors.toList());
+        ObservableList<String> methodList = FXCollections.observableArrayList(
+                actions.stream()
+                        .map(Method::getName)
+                        .distinct()
+                        .collect(Collectors.toList())
+        );
 
         TableColumn<ActionData, String> objectColumn = new TableColumn<>("Object");
-        objectColumn.setCellFactory(ComboBoxTableCell.forTableColumn(FXCollections.observableArrayList(objectList)));
+        objectColumn.setCellFactory(ComboBoxTableCell.forTableColumn(objectList));
         objectColumn.setCellValueFactory(new PropertyValueFactory<>("object"));
-        objectColumn.setEditable(true);  // Ensure column is editable
+        objectColumn.setEditable(true);
 
         TableColumn<ActionData, String> methodColumn = new TableColumn<>("Method");
-        methodColumn.setCellFactory(ComboBoxTableCell.forTableColumn(FXCollections.observableArrayList(methodList)));
+        methodColumn.setCellFactory(ComboBoxTableCell.forTableColumn(methodList));
         methodColumn.setCellValueFactory(new PropertyValueFactory<>("method"));
-        methodColumn.setEditable(true);  // Ensure column is editable
+        methodColumn.setEditable(true);
 
-        tableView.setEditable(true);  // Enable editing for the table
+        tableView.setEditable(true);
         tableView.getColumns().addAll(objectColumn, methodColumn);
 
         Label tableCaption = new Label(tableName);
-
         Button addRowButton = new Button("Add Row");
         Button deleteRowButton = new Button("Delete Row");
+
         addRowButton.setOnAction(e -> {
-            ActionData newRow = new ActionData("", "", "", InputType.NONE);  // Initial empty row
+            ActionData newRow = new ActionData("", "", "", InputType.NONE);
             tableView.getItems().add(newRow);
         });
 
@@ -92,6 +98,7 @@ public class TableViewComponent {
         HBox rowButtons = new HBox(10, addRowButton, deleteRowButton);
         VBox tableViewBox = new VBox(10, tableCaption, tableView, rowButtons);
         tableViewBox.setPadding(new Insets(10));
+
         return tableViewBox;
     }
 }
