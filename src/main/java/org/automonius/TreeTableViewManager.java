@@ -73,13 +73,15 @@ public class TreeTableViewManager {
                 String selectedValue = newValue.getValue();
                 TableView<ActionData> tableView = tableViewMap.get(selectedValue);
                 if (tableView != null) {
-                    if (oldValue != null) {
+                    if (oldValue != null && tableView.getItems().stream().anyMatch(actionData -> !actionData.getObject().isEmpty() ||
+                            !actionData.getMethod().isEmpty() || !actionData.getDescription().isEmpty() || !actionData.getInput().toString().isEmpty())) {
                         System.out.println("Saving state of: " + oldValue.getValue());
                         tableManager.saveTableViewState(oldValue.getValue(), new ArrayList<>(tableView.getItems()));
                     }
                     System.out.println("Table view found: " + tableView);
                     System.out.println("Restoring state of: " + selectedValue);
                     List<ActionData> restoredData = tableManager.getTableViewState(selectedValue);
+                    System.out.println("Restored data: " + restoredData);
                     tableView.setItems(FXCollections.observableArrayList(restoredData));
                     mainContainer.getChildren().clear();
                     mainContainer.getChildren().add(tableManager.createCommonTableViewLayout(tableView, selectedValue));
@@ -94,8 +96,6 @@ public class TreeTableViewManager {
         mainContainer.getChildren().clear();
         mainContainer.getChildren().add(tableManager.createTableView1Layout());
     }
-
-
 
     public VBox createTreeTableView(boolean loadProject) {
         System.out.println("Creating TreeTableView...");

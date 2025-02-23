@@ -29,14 +29,35 @@ public class TableManager {
     private final List<TableColumn<ActionData, ?>> additionalColumns = new ArrayList<>();
     private final Map<String, List<ActionData>> tableDataMap = new HashMap<>();
     private VBox tableView1Layout;
+    private final Map<String, Boolean> initializationMap = new HashMap<>();
 
     public TableManager(List<Method> actions) {
         this.actions = actions;
         System.out.println("TableManager instance created");
+        initializeInitialData();
+    }
+
+    // Initialize the data for all tables at the start
+    private void initializeInitialData() {
+        tableDataMap.put("TableView1", new ArrayList<>());
+        tableDataMap.put("Loaded TableView", new ArrayList<>());
+        initializationMap.put("TableView1", true);
+        initializationMap.put("Loaded TableView", true);
     }
 
     public void saveTableViewState(String tableName, List<ActionData> data) {
-        tableDataMap.put(tableName, data);
+        if (!initializationMap.getOrDefault(tableName, false)) {
+            if (data.stream().anyMatch(actionData -> !actionData.getObject().isEmpty() || !actionData.getMethod().isEmpty() ||
+                    !actionData.getDescription().isEmpty() || !actionData.getInput().toString().isEmpty())) {
+                System.out.println("Saving state for table: " + tableName + ", data: " + data);
+                tableDataMap.put(tableName, data);
+                System.out.println("Current tableDataMap: " + tableDataMap);
+            } else {
+                System.out.println("Skipping state save for table: " + tableName + " as it has no meaningful data.");
+            }
+        } else {
+            System.out.println("Initialization in progress for table: " + tableName + ", state saving skipped.");
+        }
     }
 
     public List<ActionData> getTableViewState(String tableName) {
@@ -56,119 +77,62 @@ public class TableManager {
                 .distinct()
                 .collect(Collectors.toList());
 
-        TableColumn<ActionData, String> objectColumn = new TableColumn<>("Object");
-        objectColumn.setCellFactory(ComboBoxTableCell.forTableColumn(FXCollections.observableArrayList(objectList)));
-        objectColumn.setCellValueFactory(new PropertyValueFactory<>("object"));
-        objectColumn.setEditable(true);
-
-        objectColumn.setOnEditCommit(event -> {
-            System.out.println("onEditCommit: " + event.getNewValue());
-            String newObject = event.getNewValue();
-            ActionData actionData = event.getRowValue();
-            actionData.setObject(newObject);
-            filterMethodsDropdown(newTableView, actionData, newObject);
-// Update tableDataMap
-            List<ActionData> dataList = tableDataMap.get(name);
-            int index = dataList.indexOf(actionData);
-            System.out.println("dataList: " + dataList);
-            System.out.println("index: " + index);
-// Check if actionData is found in dataList
-            if (index != -1) {
-                dataList.set(index, actionData);
-            } else {
-// Handle the case when actionData is not found in dataList
-// For example, you can add it to the list
-                dataList.add(actionData);
-            }
-            System.out.println("Updated dataList: " + dataList);
-        });
-
-        defaultColumns.add(objectColumn);
-
-        TableColumn<ActionData, String> methodColumn = new TableColumn<>("Method");
-        methodColumn.setCellFactory(column -> {
-            ComboBoxTableCell<ActionData, String> cell = new ComboBoxTableCell<>();
-            cell.setEditable(true);
-            cell.setOnMouseClicked(event -> cell.startEdit());
-            return cell;
-        });
-        methodColumn.setCellValueFactory(new PropertyValueFactory<>("method"));
-        methodColumn.setOnEditCommit(event -> {
-            ActionData actionData = (ActionData) event.getTableView().getItems().get(event.getTablePosition().getRow());
-            actionData.setMethod(event.getNewValue());
-            List<ActionData> dataList = tableDataMap.get(name);
-            int index = dataList.indexOf(actionData);
-            if (index != -1) {
-                dataList.set(index, actionData);
-            } else {
-                dataList.add(actionData);
-            }
-            System.out.println("Updated tableDataMap: " + tableDataMap);
-            System.out.println("Updated dataList: " + dataList);
-            System.out.println("Updated actionData: " + actionData);
-        });
-        methodColumn.setEditable(true);
-
-        methodColumn.setOnEditCommit(event -> {
-            if (event.getTablePosition().getRow() >= 0) {
-                String newMethod = event.getNewValue();
+        if (!columnExists(newTableView, "Object")) {
+            TableColumn<ActionData, String> objectColumn = new TableColumn<>("Object");
+            objectColumn.setCellFactory(ComboBoxTableCell.forTableColumn(FXCollections.observableArrayList(objectList)));
+            objectColumn.setCellValueFactory(new PropertyValueFactory<>("object"));
+            objectColumn.setEditable(true);
+            objectColumn.setOnEditCommit(event -> {
+                System.out.println("onEditCommit: " + event.getNewValue());
+                String newObject = event.getNewValue();
                 ActionData actionData = event.getRowValue();
-                actionData.setMethod(newMethod);
-                // Update tableDataMap
-                List<ActionData> dataList = tableDataMap.get(name);
-                int index = dataList.indexOf(actionData);
-                if (index != -1) {
-                    dataList.set(index, actionData);
-                } else {
-                    dataList.add(actionData);
+                actionData.setObject(newObject);
+                filterMethodsDropdown(newTableView, actionData, newObject);
+                updateTableDataMap(name, actionData);
+            });
+            newTableView.getColumns().add(objectColumn);
+        }
+
+        if (!columnExists(newTableView, "Method")) {
+            TableColumn<ActionData, String> methodColumn = new TableColumn<>("Method");
+            methodColumn.setCellFactory(column -> {
+                ComboBoxTableCell<ActionData, String> cell = new ComboBoxTableCell<>();
+                cell.setEditable(true);
+                cell.setOnMouseClicked(event -> cell.startEdit());
+                return cell;
+            });
+            methodColumn.setCellValueFactory(new PropertyValueFactory<>("method"));
+            methodColumn.setOnEditCommit(event -> {
+                ActionData actionData = event.getRowValue();
+                actionData.setMethod(event.getNewValue());
+                updateTableDataMap(name, actionData);
+            });
+            newTableView.getColumns().add(methodColumn);
+        }
+
+        if (!columnExists(newTableView, "Description")) {
+            TableColumn<ActionData, String> descriptionColumn = new TableColumn<>("Description");
+            descriptionColumn.setCellValueFactory(new PropertyValueFactory<>("description"));
+            descriptionColumn.setCellFactory(TextFieldTableCell.forTableColumn());
+            descriptionColumn.setEditable(true);
+            descriptionColumn.setOnEditCommit(event -> {
+                ActionData actionData = event.getRowValue();
+                actionData.setDescription(event.getNewValue());
+                updateTableDataMap(name, actionData);
+            });
+            newTableView.getColumns().add(descriptionColumn);
+        }
+
+        if (!columnExists(newTableView, "Input")) {
+            TableColumn<ActionData, String> inputColumn = new TableColumn<>("Input");
+            inputColumn.setCellValueFactory(cellData -> {
+                String input = cellData.getValue().getInput().toString();
+                if (InputType.NONE.toString().equals(input)) {
+                    input = cellData.getValue().getAdditionalProperty("Input");
                 }
-                System.out.println("Updated tableDataMap: " + tableDataMap);
-                System.out.println("Updated dataList: " + dataList);
-                System.out.println("Updated actionData: " + actionData);
-            } else {
-                System.out.println("Invalid index: " + event.getTablePosition().getRow());
-            }
-        });
-
-        defaultColumns.add(methodColumn);
-
-        TableColumn<ActionData, String> descriptionColumn = new TableColumn<>("Description");
-        descriptionColumn.setCellValueFactory(new PropertyValueFactory<>("description"));
-        descriptionColumn.setCellFactory(TextFieldTableCell.forTableColumn());
-        descriptionColumn.setOnEditCommit(event -> event.getRowValue().setDescription(event.getNewValue()));
-        descriptionColumn.setEditable(true);
-
-        descriptionColumn.setOnEditCommit(event -> {
-            String newDescription = event.getNewValue();
-            ActionData actionData = event.getRowValue();
-            actionData.setDescription(newDescription);
-// Update tableDataMap
-            List<ActionData> dataList = tableDataMap.get(name);
-            int index = dataList.indexOf(actionData);
-            if (index != -1) {
-                dataList.set(index, actionData);
-            } else {
-                dataList.add(actionData);
-            }
-            System.out.println("Updated tableDataMap: " + tableDataMap);
-            System.out.println("Updated dataList: " + dataList);
-            System.out.println("Updated actionData: " + actionData);
-        });
-
-
-        defaultColumns.add(descriptionColumn);
-
-        TableColumn<ActionData, String> inputColumn = new TableColumn<>("Input");
-        inputColumn.setCellValueFactory(cellData -> {
-            String input = cellData.getValue().getInput().toString();
-            if (InputType.NONE.toString().equals(input)) {
-                input = cellData.getValue().getAdditionalProperty("Input");
-            }
-            return new SimpleStringProperty(input);
-        });
-
-        inputColumn.setCellFactory(column -> {
-            return new TableCell<ActionData, String>() {
+                return new SimpleStringProperty(input);
+            });
+            inputColumn.setCellFactory(column -> new TableCell<ActionData, String>() {
                 final Button editButton = new Button("Edit");
                 {
                     editButton.setOnAction(event -> {
@@ -186,44 +150,39 @@ public class TableManager {
                         setGraphic(editButton);
                     }
                 }
-            };
-        });
-
-        List<TableColumn<ActionData, ?>> columnsList = new ArrayList<>();
-        columnsList.add(objectColumn);
-        columnsList.add(methodColumn);
-        columnsList.add(descriptionColumn);
-        columnsList.add(inputColumn);
-        newTableView.getColumns().addAll(columnsList);
+            });
+            newTableView.getColumns().add(inputColumn);
+        }
 
         newTableView.setEditable(true);
 
-
-        inputColumn.setOnEditCommit(event -> {
-            ActionData actionData = event.getRowValue();
-            List<ActionData> dataList = tableDataMap.get(name);
-            int index = dataList.indexOf(actionData);
-            if (index != -1) {
-                dataList.set(index, actionData);
-            } else {
-                dataList.add(actionData);
-            }
-            System.out.println("Updated tableDataMap: " + tableDataMap);
-            System.out.println("Updated dataList: " + dataList);
-            System.out.println("Updated actionData: " + actionData);
-        });
-
-        defaultColumns.add(inputColumn);
-
-
-        // Add a single initial row
-        ActionData initialRow = new ActionData("", "", "", InputType.NONE);
-        List<ActionData> initialData = new ArrayList<>();
-        initialData.add(new ActionData("", "", "", InputType.NONE));
-        tableDataMap.put(name, initialData);
+        List<ActionData> initialData = getTableViewState(name);
+        if (initialData.isEmpty()) {
+            initialData.add(new ActionData("", "", "", InputType.NONE));
+        }
+        System.out.println("Setting initial data for " + name + ": " + initialData);
         newTableView.setItems(FXCollections.observableArrayList(initialData));
         tableViewMap.put(name, newTableView);
         return newTableView;
+    }
+
+    private boolean columnExists(TableView<ActionData> tableView, String columnHeader) {
+        return tableView.getColumns().stream()
+                .anyMatch(column -> column.getText().equals(columnHeader));
+    }
+
+    public void updateTableDataMap(String tableName, ActionData actionData) {
+        List<ActionData> dataList = tableDataMap.get(tableName);
+        if (dataList == null) {
+            dataList = new ArrayList<>();
+            tableDataMap.put(tableName, dataList);
+        }
+        int index = dataList.indexOf(actionData);
+        if (index != -1) {
+            dataList.set(index, actionData);
+        } else {
+            dataList.add(actionData);
+        }
     }
 
     private void addComboBoxColumn(TableView<ActionData> tableView, String header, List<String> options, String property) {
