@@ -35,6 +35,14 @@ public class TableManager {
         System.out.println("TableManager instance created");
     }
 
+    public void saveTableViewState(String tableName, List<ActionData> data) {
+        tableDataMap.put(tableName, data);
+    }
+
+    public List<ActionData> getTableViewState(String tableName) {
+        return tableDataMap.getOrDefault(tableName, new ArrayList<>());
+    }
+
     public List<Method> getActions() {
         return actions;
     }

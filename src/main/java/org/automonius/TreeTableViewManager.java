@@ -1,10 +1,12 @@
 package org.automonius;
 
 import javafx.beans.property.SimpleStringProperty;
+import javafx.collections.FXCollections;
 import javafx.geometry.Insets;
 import javafx.scene.control.*;
 import javafx.scene.layout.VBox;
 import java.lang.reflect.Method;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -24,54 +26,76 @@ public class TreeTableViewManager {
         this.tableViewMap = new HashMap<>();
         this.rootItem = new TreeItem<>("Root");
         this.treeTableView = new TreeTableView<>(rootItem);
-        // Initialize the list for discovered actions
         actions = tableManager.getActions();
         setupTreeTableView(loadProject);
     }
 
     private void setupTreeTableView(boolean loadProject) {
         System.out.println("Setting up TreeTableView...");
-        TreeItem<String> defaultDirectory = new TreeItem<>("Default Directory");
+        TreeItem<String> mainDirectory = new TreeItem<>("Main");
         TreeItem<String> defaultTableView = new TreeItem<>("TableView1");
-        defaultDirectory.getChildren().add(defaultTableView);
-        rootItem.getChildren().add(defaultDirectory);
-        TableView<ActionData> defaultTableViewInstance = tableManager.createNewTableView("TableView1", actions);
-        tableViewMap.put("TableView1", defaultTableViewInstance);
+        mainDirectory.getChildren().add(defaultTableView);
+        rootItem.getChildren().add(mainDirectory);
+
+        if (!tableViewMap.containsKey("TableView1")) {
+            TableView<ActionData> defaultTableViewInstance = tableManager.createNewTableView("TableView1", actions);
+            tableViewMap.put("TableView1", defaultTableViewInstance);
+        }
+
         if (loadProject) {
             TreeItem<String> existingDirectory = new TreeItem<>("Loaded Directory");
             TreeItem<String> tableViewItem = new TreeItem<>("Loaded TableView");
             existingDirectory.getChildren().add(tableViewItem);
             rootItem.getChildren().add(existingDirectory);
-            TableView<ActionData> loadedTableViewInstance = tableManager.createNewTableView("Loaded TableView", actions);
-            tableViewMap.put("Loaded TableView", loadedTableViewInstance);
+
+            if (!tableViewMap.containsKey("Loaded TableView")) {
+                TableView<ActionData> loadedTableViewInstance = tableManager.createNewTableView("Loaded TableView", actions);
+                tableViewMap.put("Loaded TableView", loadedTableViewInstance);
+            }
         }
+
         rootItem.setExpanded(true);
         treeTableView.setShowRoot(false);
         TreeTableColumn<String, String> column = new TreeTableColumn<>("Directory Structure");
         column.setCellValueFactory(param -> new SimpleStringProperty(param.getValue().getValue()));
         treeTableView.getColumns().add(column);
+
         treeTableView.getSelectionModel().selectedItemProperty().addListener((observable, oldValue, newValue) -> {
+            if (newValue == null) return;
             if (oldValue != null && oldValue.equals(newValue)) {
                 return;
             }
-            System.out.println("Selected item: " + newValue);
-            System.out.println("Old value: " + oldValue);
-            System.out.println("New value: " + newValue);
+            System.out.println("Selected item: " + newValue.getValue());
+            if (oldValue != null) {
+                System.out.println("Previous item: " + oldValue.getValue());
+            }
             if (newValue != null) {
                 String selectedValue = newValue.getValue();
                 TableView<ActionData> tableView = tableViewMap.get(selectedValue);
                 if (tableView != null) {
+                    if (oldValue != null) {
+                        System.out.println("Saving state of: " + oldValue.getValue());
+                        tableManager.saveTableViewState(oldValue.getValue(), new ArrayList<>(tableView.getItems()));
+                    }
                     System.out.println("Table view found: " + tableView);
+                    System.out.println("Restoring state of: " + selectedValue);
+                    List<ActionData> restoredData = tableManager.getTableViewState(selectedValue);
+                    tableView.setItems(FXCollections.observableArrayList(restoredData));
                     mainContainer.getChildren().clear();
                     mainContainer.getChildren().add(tableManager.createCommonTableViewLayout(tableView, selectedValue));
+                } else {
+                    System.out.println("No TableView found for: " + selectedValue);
                 }
             }
         });
+
         // Select the default TableView1 on initial load
         treeTableView.getSelectionModel().select(defaultTableView);
         mainContainer.getChildren().clear();
         mainContainer.getChildren().add(tableManager.createTableView1Layout());
     }
+
+
 
     public VBox createTreeTableView(boolean loadProject) {
         System.out.println("Creating TreeTableView...");
