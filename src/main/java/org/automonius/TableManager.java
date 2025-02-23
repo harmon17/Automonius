@@ -68,9 +68,12 @@ public class TableManager {
         return actions;
     }
 
+
+
     public TableView<ActionData> createNewTableView(String name, List<Method> actions) {
         System.out.println("Creating new table view with name: " + name);
         TableView<ActionData> newTableView = new TableView<>();
+        newTableView.setFixedCellSize(35); // Set a fixed cell size to ensure buttons fit properly
 
         List<String> objectList = actions.stream()
                 .map(action -> action.getAnnotation(Action.class).object().toString())
@@ -82,6 +85,7 @@ public class TableManager {
             objectColumn.setCellFactory(ComboBoxTableCell.forTableColumn(FXCollections.observableArrayList(objectList)));
             objectColumn.setCellValueFactory(new PropertyValueFactory<>("object"));
             objectColumn.setEditable(true);
+            objectColumn.setPrefWidth(100); // Set preferred width for the column
             objectColumn.setOnEditCommit(event -> {
                 System.out.println("onEditCommit: " + event.getNewValue());
                 String newObject = event.getNewValue();
@@ -107,6 +111,7 @@ public class TableManager {
                 actionData.setMethod(event.getNewValue());
                 updateTableDataMap(name, actionData);
             });
+            methodColumn.setPrefWidth(100); // Set preferred width for the column
             newTableView.getColumns().add(methodColumn);
         }
 
@@ -120,6 +125,7 @@ public class TableManager {
                 actionData.setDescription(event.getNewValue());
                 updateTableDataMap(name, actionData);
             });
+            descriptionColumn.setPrefWidth(150); // Set preferred width for the column
             newTableView.getColumns().add(descriptionColumn);
         }
 
@@ -151,6 +157,7 @@ public class TableManager {
                     }
                 }
             });
+            inputColumn.setPrefWidth(100); // Set preferred width for the column
             newTableView.getColumns().add(inputColumn);
         }
 
