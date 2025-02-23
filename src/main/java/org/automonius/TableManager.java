@@ -30,6 +30,8 @@ public class TableManager {
     private final Map<String, List<ActionData>> tableDataMap = new HashMap<>();
     private VBox tableView1Layout;
     private final Map<String, Boolean> initializationMap = new HashMap<>();
+    private final Map<String, List<String>> tableColumnMap = new HashMap<>(); // Map to store column structures
+
 
     public TableManager(List<Method> actions) {
         this.actions = actions;
@@ -46,22 +48,35 @@ public class TableManager {
     }
 
     public void saveTableViewState(String tableName, List<ActionData> data) {
-        if (!initializationMap.getOrDefault(tableName, false)) {
-            if (data.stream().anyMatch(actionData -> !actionData.getObject().isEmpty() || !actionData.getMethod().isEmpty() ||
-                    !actionData.getDescription().isEmpty() || !actionData.getInput().toString().isEmpty())) {
-                System.out.println("Saving state for table: " + tableName + ", data: " + data);
-                tableDataMap.put(tableName, data);
-                System.out.println("Current tableDataMap: " + tableDataMap);
-            } else {
-                System.out.println("Skipping state save for table: " + tableName + " as it has no meaningful data.");
-            }
+        if (!data.isEmpty()) {
+            System.out.println("Saving state for table: " + tableName + ", data: " + data);
+            tableDataMap.put(tableName, data);
+
+            // Save column names
+            List<String> columns = tableViewMap.get(tableName).getColumns().stream()
+                    .map(TableColumn::getText)
+                    .collect(Collectors.toList());
+            tableColumnMap.put(tableName, columns);
+
+            System.out.println("Current tableDataMap: " + tableDataMap);
+            System.out.println("Current tableColumnMap: " + tableColumnMap);
         } else {
-            System.out.println("Initialization in progress for table: " + tableName + ", state saving skipped.");
+            System.out.println("Skipping state save for table: " + tableName + " as it has no meaningful data.");
         }
     }
 
+    // Get table state
     public List<ActionData> getTableViewState(String tableName) {
-        return tableDataMap.getOrDefault(tableName, new ArrayList<>());
+        List<ActionData> state = tableDataMap.getOrDefault(tableName, new ArrayList<>());
+        System.out.println("Retrieving state for table: " + tableName + ", state: " + state);
+        return state;
+    }
+
+    // Get table columns
+    public List<String> getTableColumns(String tableName) {
+        List<String> columns = tableColumnMap.getOrDefault(tableName, new ArrayList<>());
+        System.out.println("Retrieving columns for table: " + tableName + ", columns: " + columns);
+        return columns;
     }
 
     public List<Method> getActions() {
@@ -163,6 +178,13 @@ public class TableManager {
 
         newTableView.setEditable(true);
 
+        // Restore additional columns
+        List<String> additionalColumns = getTableColumns(name);
+        System.out.println("Restoring additional columns for " + name + ": " + additionalColumns);
+        for (String columnName : additionalColumns) {
+            addColumnIfNotExists(newTableView, columnName, null, 100, null);
+        }
+
         List<ActionData> initialData = getTableViewState(name);
         if (initialData.isEmpty()) {
             initialData.add(new ActionData("", "", "", InputType.NONE));
@@ -171,6 +193,28 @@ public class TableManager {
         newTableView.setItems(FXCollections.observableArrayList(initialData));
         tableViewMap.put(name, newTableView);
         return newTableView;
+    }
+
+    public void addColumnIfNotExists(TableView<ActionData> tableView, String header, String property, int width, List<String> options) {
+        if (!columnExists(tableView, header)) {
+            TableColumn<ActionData, String> column = new TableColumn<>(header);
+            column.setPrefWidth(width);
+            if (options != null) {
+                column.setCellFactory(ComboBoxTableCell.forTableColumn(FXCollections.observableArrayList(options)));
+            } else {
+                column.setCellFactory(TextFieldTableCell.forTableColumn());
+            }
+            if (property != null) {
+                column.setCellValueFactory(new PropertyValueFactory<>(property));
+            } else {
+                column.setCellValueFactory(cellData -> new SimpleStringProperty(cellData.getValue().getAdditionalProperty(header)));
+                column.setOnEditCommit(event -> event.getRowValue().setAdditionalProperty(header, event.getNewValue()));
+            }
+            column.setEditable(true);
+            column.setSortable(false);
+            tableView.getColumns().add(column);
+            System.out.println("Added column: " + header);
+        }
     }
 
     private boolean columnExists(TableView<ActionData> tableView, String columnHeader) {
