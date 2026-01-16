@@ -8,6 +8,8 @@ import javafx.collections.ObservableList;
 import javafx.event.ActionEvent;
 import javafx.fxml.FXML;
 import javafx.scene.Scene;
+import javafx.scene.canvas.Canvas;
+import javafx.scene.canvas.GraphicsContext;
 import javafx.scene.control.*;
 import javafx.scene.control.cell.ComboBoxTableCell;
 import javafx.scene.control.cell.PropertyValueFactory;
@@ -15,16 +17,16 @@ import javafx.scene.control.cell.TextFieldTableCell;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.scene.input.*;
-import javafx.scene.layout.HBox;
-import javafx.scene.layout.Priority;
-import javafx.scene.layout.Region;
-import javafx.scene.layout.VBox;
+import javafx.scene.layout.*;
+import javafx.scene.paint.Color;
 import javafx.stage.Stage;
 import org.apache.poi.ss.usermodel.DataFormatter;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.Workbook;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import org.automonius.exec.TestCase;
+import org.automonius.exec.TestExecutor;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -48,15 +50,28 @@ public class MainController {
     private TableColumn<TestStep, String> objectColumn;
     @FXML
     private TableColumn<TestStep, String> inputColumn;
-    @FXML private Button newSuiteBtn;
-    @FXML private Button subSuiteBtn;
-    @FXML private Button testScenarioBtn;
-    @FXML private Button deleteBtn;
-    @FXML private Label testExplorerLabel;
-    @FXML private TableColumn<TestStep, String> descriptionColumn;
+    @FXML
+    private Button newSuiteBtn;
+    @FXML
+    private Button subSuiteBtn;
+    @FXML
+    private Button testScenarioBtn;
+    @FXML
+    private Button deleteBtn;
+    @FXML
+    private Label testExplorerLabel;
+    @FXML
+    private TableColumn<TestStep, String> descriptionColumn;
+    @FXML
+    private CanvasController canvasPanelController;
+
+    @FXML
+    private StackPane canvasWrapper;
+
     private final Map<String, List<TestStep>> scenarioSteps = new HashMap<>();
     // Cache of extra column names per scenario
     private final Map<String, List<String>> scenarioColumns = new HashMap<>();
+
 
     private final DataFormatter formatter = new DataFormatter();
 
@@ -64,36 +79,44 @@ public class MainController {
     @FXML
     public void initialize() {
 
-        tableView.setFixedCellSize(30); // or whatever looks good
-
-        // Root node
+        // Root node setup
         TreeItem<TestNode> root = new TreeItem<>(new TestNode("Directory Structure", NodeType.ROOT));
         root.setExpanded(true);
 
-        // Default suite
         TreeItem<TestNode> defaultSuite = new TreeItem<>(new TestNode("Suite 1", NodeType.SUITE));
         defaultSuite.setExpanded(true);
 
         TreeItem<TestNode> defaultScenario = new TreeItem<>(new TestNode("Test Suite", NodeType.TEST_SCENARIO));
         defaultSuite.getChildren().add(defaultScenario);
 
-        root.getChildren().add(defaultSuite);
+        String key = makeKey(defaultScenario);
 
+        // ✅ Seed with a sample TestCase from TestExecutor
+        List<TestStep> steps = new ArrayList<>();
+        TestCase sample = TestExecutor.getTests().get("Check File Readable");
+        steps.add(new TestStep(sample.getObjectName(), sample.getActionName(),
+                sample.getDescription(), sample.getInput()));
+        scenarioSteps.put(key, steps);
+        tableView.setItems(FXCollections.observableArrayList(steps));
+
+        root.getChildren().add(defaultSuite);
         treeView.setRoot(root);
 
+        // Setup columns
         descriptionColumn.setCellValueFactory(new PropertyValueFactory<>("description"));
-        descriptionColumn.setCellFactory(TextFieldTableCell.forTableColumn());
+        descriptionColumn.setCellFactory(col -> new AutoCommitTextFieldTableCell<>());
         descriptionColumn.setOnEditCommit(event -> event.getRowValue().setDescription(event.getNewValue()));
 
-        Map<String, List<String>> actionsByObject = Map.of(
-                "Web Browser", List.of("Open URL", "Click", "Type", "Navigate"),
-                "Database", List.of("Connect", "Query", "Update", "Close"),
-                "API", List.of("Send Request", "Validate Response"),
-                "File System", List.of("Read File", "Write File", "Delete File")
-        );
+        inputColumn.setCellFactory(col -> new AutoCommitTextFieldTableCell<>());
+        inputColumn.setOnEditCommit(event -> event.getRowValue().setInput(event.getNewValue()));
 
-        // Make the table editable
-        tableView.setEditable(true);
+
+
+
+        objectColumn.setCellValueFactory(new PropertyValueFactory<>("object"));
+        actionColumn.setCellValueFactory(new PropertyValueFactory<>("action"));
+        inputColumn.setCellValueFactory(new PropertyValueFactory<>("input"));
+
 
         itemColumn.setCellValueFactory(cellData ->
                 new ReadOnlyStringWrapper(String.valueOf(tableView.getItems().indexOf(cellData.getValue()) + 1))
@@ -110,14 +133,9 @@ public class MainController {
             }
         });
 
-        objectColumn.setCellValueFactory(new PropertyValueFactory<>("object"));
-        actionColumn.setCellValueFactory(new PropertyValueFactory<>("action"));
-        inputColumn.setCellValueFactory(new PropertyValueFactory<>("input"));
-
+        Map<String, List<String>> actionsByObject = TestExecutor.getActionsByObject();
         ObservableList<String> objectOptions = FXCollections.observableArrayList(actionsByObject.keySet());
         objectColumn.setCellFactory(col -> new TableCell<TestStep, String>() {
-            private final ComboBox<String> combo = new ComboBox<>(objectOptions);
-
             @Override
             protected void updateItem(String item, boolean empty) {
                 super.updateItem(item, empty);
@@ -126,16 +144,14 @@ public class MainController {
                 } else {
                     TestStep step = getTableRow().getItem();
 
-                    combo.valueProperty().unbindBidirectional(step.objectProperty());
+                    ComboBox<String> combo = new ComboBox<>(objectOptions);
                     combo.valueProperty().bindBidirectional(step.objectProperty());
 
-                    // auto‑set default action when object changes
                     combo.valueProperty().addListener((obs, oldVal, newVal) -> {
                         if (newVal != null) {
                             List<String> methods = actionsByObject.getOrDefault(newVal, List.of());
                             if (!methods.isEmpty()) step.setAction(methods.get(0));
                         }
-                        tableView.refresh();
                     });
 
                     setGraphic(combo);
@@ -144,10 +160,7 @@ public class MainController {
         });
 
 
-
         actionColumn.setCellFactory(col -> new TableCell<TestStep, String>() {
-            private final ComboBox<String> combo = new ComboBox<>();
-
             @Override
             protected void updateItem(String item, boolean empty) {
                 super.updateItem(item, empty);
@@ -156,19 +169,15 @@ public class MainController {
                 } else {
                     TestStep step = getTableRow().getItem();
 
-                    combo.setItems(FXCollections.observableArrayList(
-                            actionsByObject.getOrDefault(step.getObject(), List.of())
-                    ));
-
-                    combo.valueProperty().unbindBidirectional(step.objectProperty());
-                    combo.valueProperty().bindBidirectional(step.objectProperty());
+                    ComboBox<String> combo = new ComboBox<>(
+                            FXCollections.observableArrayList(actionsByObject.getOrDefault(step.getObject(), List.of()))
+                    );
+                    combo.valueProperty().bindBidirectional(step.actionProperty());
 
                     setGraphic(combo);
                 }
             }
         });
-
-
 
 
         actionColumn.setOnEditCommit(event -> event.getRowValue().setAction(event.getNewValue()));
@@ -255,7 +264,6 @@ public class MainController {
                 });
             }
         });
-
 
 
         testExplorerLabel.setGraphic(makeIcon("/icons/explorer.png", 50, 50));
@@ -423,10 +431,10 @@ public class MainController {
         if (selected != null &&
                 (selected.getValue().getType() == NodeType.SUITE || selected.getValue().getType() == NodeType.SUB_SUITE)) {
 
-            TextInputDialog dialog = new TextInputDialog("TestScenario");
-            dialog.setTitle("New TestScenario");
-            dialog.setHeaderText("Create a new TestScenario");
-            dialog.setContentText("Enter scenario name:");
+            TextInputDialog dialog = new TextInputDialog("TestSuite");
+            dialog.setTitle("New TestSuite");
+            dialog.setHeaderText("Create a new TestSuite");
+            dialog.setContentText("Enter TestSuite name:");
 
             dialog.showAndWait().ifPresent(name -> {
                 if (!name.trim().isEmpty()) {
@@ -434,6 +442,17 @@ public class MainController {
                             new TestNode(name.trim(), NodeType.TEST_SCENARIO)
                     );
                     selected.getChildren().add(testScenario);
+
+                    // ✅ Seed with one blank row
+                    String key = makeKey(testScenario);
+                    List<TestStep> steps = new ArrayList<>();
+                    steps.add(new TestStep("", "", "", ""));
+                    scenarioSteps.put(key, steps);
+
+                    // If this new scenario is selected immediately, show it
+                    if (treeView.getSelectionModel().getSelectedItem() == testScenario) {
+                        tableView.setItems(FXCollections.observableArrayList(steps));
+                    }
                 } else {
                     showError("Name cannot be empty.");
                 }
@@ -442,7 +461,6 @@ public class MainController {
             showError("TestScenario can only be added inside a Suite or Sub-Suite.");
         }
     }
-
 
 
     @FXML
@@ -486,17 +504,12 @@ public class MainController {
         scenarioSteps.put(key, copy);
     }
 
-
-
-
-
     private void loadTestScenario(TreeItem<TestNode> scenario) {
         tableView.getColumns().setAll(itemColumn, objectColumn, actionColumn, descriptionColumn, inputColumn);
 
         String key = makeKey(scenario);
         List<TestStep> steps = scenarioSteps.getOrDefault(key, new ArrayList<>());
 
-        // Create new observable list with fresh TestStep objects
         ObservableList<TestStep> clonedSteps = FXCollections.observableArrayList();
         for (TestStep step : steps) {
             TestStep clone = new TestStep(step.getItem(), step.getAction(), step.getObject(), step.getInput());
@@ -509,17 +522,15 @@ public class MainController {
 
         tableView.setItems(clonedSteps);
 
-        // Restore extra columns for this scenario
         List<String> extras = scenarioColumns.getOrDefault(key, List.of());
         for (String colName : extras) {
             TableColumn<TestStep, String> extraColumn = new TableColumn<>(colName);
             extraColumn.setCellValueFactory(cellData -> cellData.getValue().getExtraProperty(colName));
-            extraColumn.setCellFactory(TextFieldTableCell.forTableColumn());
+            extraColumn.setCellFactory(col -> new AutoCommitTextFieldTableCell<>());
             extraColumn.setOnEditCommit(evt -> evt.getRowValue().setExtra(colName, evt.getNewValue()));
             tableView.getColumns().add(extraColumn);
         }
     }
-
 
 
     private void showError(String message) {
@@ -587,7 +598,7 @@ public class MainController {
 
         TableColumn<TestStep, String> extraColumn = new TableColumn<>(colName);
         extraColumn.setCellValueFactory(cellData -> cellData.getValue().getExtraProperty(colName));
-        extraColumn.setCellFactory(TextFieldTableCell.forTableColumn());
+        extraColumn.setCellFactory(col -> new AutoCommitTextFieldTableCell<>());
         extraColumn.setOnEditCommit(evt -> evt.getRowValue().setExtra(colName, evt.getNewValue()));
 
         tableView.getColumns().add(extraColumn);
@@ -595,9 +606,6 @@ public class MainController {
         // ✅ record column name for this scenario
         scenarioColumns.computeIfAbsent(key, k -> new ArrayList<>()).add(colName);
     }
-
-
-
 
 
     @FXML
@@ -618,8 +626,8 @@ public class MainController {
         return (cell == null) ? "" : formatter.formatCellValue(cell);
     }
 
-    private Map<String,Integer> buildColumnMap(Row header) {
-        Map<String,Integer> map = new HashMap<>();
+    private Map<String, Integer> buildColumnMap(Row header) {
+        Map<String, Integer> map = new HashMap<>();
         if (header != null) {
             for (int c = 0; c < header.getLastCellNum(); c++) {
                 String name = formatter.formatCellValue(header.getCell(c));
@@ -654,14 +662,7 @@ public class MainController {
                 Sheet sheet = workbook.createSheet(suite.getValue().getName());
                 int[] rowIndex = {0};
 
-                // Header row
-                Row header = sheet.createRow(rowIndex[0]++);
-                int colIndex = 0;
-                for (TableColumn<TestStep, ?> col : tableView.getColumns()) {
-                    header.createCell(colIndex++).setCellValue(col.getText());
-                }
-
-                // Export all scenarios/sub-suites recursively
+                // ✅ Export all scenarios/sub-suites recursively
                 saveScenariosRecursive(sheet, suite, rowIndex);
 
                 // Write each suite to its own file
@@ -676,6 +677,7 @@ public class MainController {
         System.out.println("Project saved to " + projectDir.getAbsolutePath());
     }
 
+
     private void saveScenariosRecursive(Sheet sheet, TreeItem<TestNode> node, int[] rowIndex) {
         NodeType type = node.getValue().getType();
 
@@ -685,22 +687,41 @@ public class MainController {
         }
 
         if (type == NodeType.TEST_SCENARIO) {
-            // ❌ removed saveTestScenario(node);
             String key = makeKey(node);
             List<TestStep> steps = scenarioSteps.getOrDefault(key, List.of());
 
+            // Scenario header row
             Row row = sheet.createRow(rowIndex[0]++);
             row.createCell(0).setCellValue("Scenario: " + node.getValue().getName());
 
-            for (TestStep step : steps) {
-                Row stepRow = sheet.createRow(rowIndex[0]++);
-                for (int c = 0; c < tableView.getColumns().size(); c++) {
-                    TableColumn<TestStep, ?> col = tableView.getColumns().get(c);
-                    Object value = col.getCellObservableValue(step).getValue();
-                    stepRow.createCell(c).setCellValue(value == null ? "" : value.toString());
-                }
+            // ✅ Build header row with default + extras
+            Row header = sheet.createRow(rowIndex[0]++);
+            int colIndex = 0;
+            header.createCell(colIndex++).setCellValue("Item");
+            header.createCell(colIndex++).setCellValue("Object");
+            header.createCell(colIndex++).setCellValue("Action");
+            header.createCell(colIndex++).setCellValue("Description");
+            header.createCell(colIndex++).setCellValue("Input");
+
+            List<String> extras = scenarioColumns.getOrDefault(key, List.of());
+            for (String colName : extras) {
+                header.createCell(colIndex++).setCellValue(colName);
             }
 
+            // ✅ Write each step row with extras
+            for (TestStep step : steps) {
+                Row stepRow = sheet.createRow(rowIndex[0]++);
+                colIndex = 0;
+                stepRow.createCell(colIndex++).setCellValue(step.getItem());
+                stepRow.createCell(colIndex++).setCellValue(step.getObject());
+                stepRow.createCell(colIndex++).setCellValue(step.getAction());
+                stepRow.createCell(colIndex++).setCellValue(step.getDescription());
+                stepRow.createCell(colIndex++).setCellValue(step.getInput());
+
+                for (String colName : extras) {
+                    stepRow.createCell(colIndex++).setCellValue(step.getExtra(colName));
+                }
+            }
         }
 
         for (TreeItem<TestNode> child : node.getChildren()) {
@@ -708,8 +729,32 @@ public class MainController {
         }
     }
 
+
     private void resetDefaultColumns() {
         tableView.getColumns().setAll(itemColumn, objectColumn, actionColumn, descriptionColumn, inputColumn);
+    }
+
+    @FXML
+    private void handleRun(ActionEvent event) {
+        // Example: run the first row in the table
+        if (!tableView.getItems().isEmpty()) {
+            TestStep step = tableView.getItems().get(0); // or selected row
+            TestCase testCase = new TestCase(
+                    step.getObject(),
+                    step.getAction(),
+                    step.getDescription(),
+                    step.getInput()
+            );
+
+            boolean result = TestExecutor.runTest(testCase);
+
+            canvasPanelController.clearCanvas();
+            if (result) {
+                canvasPanelController.drawPassIcon(50, 50);
+            } else {
+                canvasPanelController.drawFailIcon(50, 50);
+            }
+        }
     }
 
 

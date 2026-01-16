@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<?import javafx.scene.canvas.Canvas?>
 <?import javafx.scene.control.*?>
 <?import javafx.scene.layout.*?>
 <?import java.net.URL?>
@@ -17,17 +16,13 @@
     </stylesheets>
 
     <children>
-        <!-- Canvas wrapper anchored to the right -->
-        <StackPane fx:id="canvasWrapper"
-                   styleClass="canvas-wrapper"
-                   AnchorPane.topAnchor="122.0"
-                   AnchorPane.bottomAnchor="14.0"
-                   AnchorPane.rightAnchor="14.0"
-                   AnchorPane.leftAnchor="850.0">
-            <children>
-                <Canvas fx:id="canvas"/>
-            </children>
-        </StackPane>
+        <!-- Include the Canvas panel -->
+        <fx:include fx:id="canvasPanel"
+                    source="CanvasPanel.fxml"
+                    AnchorPane.topAnchor="122.0"
+                    AnchorPane.bottomAnchor="14.0"
+                    AnchorPane.rightAnchor="14.0"
+                    AnchorPane.leftAnchor="850.0"/>
 
         <!-- Test Explorer -->
         <VBox AnchorPane.topAnchor="122.0" AnchorPane.leftAnchor="19.0"
@@ -51,11 +46,11 @@
             </columns>
         </TableView>
 
-        <!-- Top buttons -->
+        <!-- Top controls -->
         <HBox AnchorPane.topAnchor="14.0" AnchorPane.leftAnchor="14.0"
-              prefHeight="34.0" prefWidth="350.0" spacing="10">
+              prefHeight="34.0" prefWidth="600.0" spacing="10">
             <children>
-                <Button fx:id="runBtn" text="Run">
+                <Button fx:id="runBtn" text="Run" onAction="#handleRun">
                     <tooltip><Tooltip text="Run the current scenario"/></tooltip>
                 </Button>
                 <Button fx:id="saveBtn" text="Save" onAction="#handleSave">

@@ -25,11 +25,16 @@ import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.Workbook;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import org.automonius.Actions.ActionLibrary;
+import org.automonius.Annotations.ActionMeta;
+import org.automonius.exec.TestCase;
+import org.automonius.exec.TestExecutor;
 
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -60,56 +65,66 @@ public class MainController {
     private Label testExplorerLabel;
     @FXML
     private TableColumn<TestStep, String> descriptionColumn;
-    @FXML private Canvas canvas;
+    @FXML
+    private CanvasController canvasPanelController;
 
-    @FXML private StackPane canvasWrapper;
+    @FXML
+    private StackPane canvasWrapper;
 
     private final Map<String, List<TestStep>> scenarioSteps = new HashMap<>();
     // Cache of extra column names per scenario
     private final Map<String, List<String>> scenarioColumns = new HashMap<>();
+
 
     private final DataFormatter formatter = new DataFormatter();
 
 
     @FXML
     public void initialize() {
-        // Bind canvas size to wrapper
-        canvas.widthProperty().bind(canvasWrapper.widthProperty());
-        canvas.heightProperty().bind(canvasWrapper.heightProperty());
 
-        // Repaint on resize
-        canvas.widthProperty().addListener((obs, oldVal, newVal) -> paintBackground());
-        canvas.heightProperty().addListener((obs, oldVal, newVal) -> paintBackground());
-
-        paintBackground();
-
-        tableView.setFixedCellSize(30); // or whatever looks good
-
-        // Root node
+        // Root node setup
         TreeItem<TestNode> root = new TreeItem<>(new TestNode("Directory Structure", NodeType.ROOT));
         root.setExpanded(true);
 
-        // Default suite
         TreeItem<TestNode> defaultSuite = new TreeItem<>(new TestNode("Suite 1", NodeType.SUITE));
         defaultSuite.setExpanded(true);
 
         TreeItem<TestNode> defaultScenario = new TreeItem<>(new TestNode("Test Suite", NodeType.TEST_SCENARIO));
         defaultSuite.getChildren().add(defaultScenario);
 
-        // Seed the default TestSuite with one blank row
         String key = makeKey(defaultScenario);
-        List<TestStep> steps = new ArrayList<>();
-        steps.add(new TestStep("", "", "", "")); // one default row
+
+        // ✅ Use ObservableList directly
+        ObservableList<TestStep> steps = FXCollections.observableArrayList();
+
+// Optionally seed with a sample TestCase
+        TestCase sample = TestExecutor.getTestByAction(
+                org.automonius.Actions.ActionLibrary.class,
+                "checkFileReadable"
+        );
+
+        if (sample != null) {
+            steps.add(new TestStep(
+                    sample.getObjectName(),
+                    sample.getActionName(),
+                    sample.getDescription(),
+                    sample.getInput()
+            ));
+        }
+
+        // Add a blank row for user editing
+        steps.add(new TestStep("", "", "", ""));
+
+        // Bind to table and scenario map
+        tableView.setItems(steps);
         scenarioSteps.put(key, steps);
 
-        // Show it immediately in the table
-        tableView.setItems(FXCollections.observableArrayList(steps));
-
-
+        // Tree setup
         root.getChildren().add(defaultSuite);
-
         treeView.setRoot(root);
 
+
+        // Setup columns
         descriptionColumn.setCellValueFactory(new PropertyValueFactory<>("description"));
         descriptionColumn.setCellFactory(col -> new AutoCommitTextFieldTableCell<>());
         descriptionColumn.setOnEditCommit(event -> event.getRowValue().setDescription(event.getNewValue()));
@@ -118,15 +133,12 @@ public class MainController {
         inputColumn.setOnEditCommit(event -> event.getRowValue().setInput(event.getNewValue()));
 
 
-        Map<String, List<String>> actionsByObject = Map.of(
-                "Web Browser", List.of("Open URL", "Click", "Type", "Navigate"),
-                "Database", List.of("Connect", "Query", "Update", "Close"),
-                "API", List.of("Send Request", "Validate Response"),
-                "File System", List.of("Read File", "Write File", "Delete File")
-        );
 
-        // Make the table editable
-        tableView.setEditable(true);
+
+        objectColumn.setCellValueFactory(new PropertyValueFactory<>("object"));
+        actionColumn.setCellValueFactory(new PropertyValueFactory<>("action"));
+        inputColumn.setCellValueFactory(new PropertyValueFactory<>("input"));
+
 
         itemColumn.setCellValueFactory(cellData ->
                 new ReadOnlyStringWrapper(String.valueOf(tableView.getItems().indexOf(cellData.getValue()) + 1))
@@ -143,10 +155,7 @@ public class MainController {
             }
         });
 
-        objectColumn.setCellValueFactory(new PropertyValueFactory<>("object"));
-        actionColumn.setCellValueFactory(new PropertyValueFactory<>("action"));
-        inputColumn.setCellValueFactory(new PropertyValueFactory<>("input"));
-
+        Map<String, List<String>> actionsByObject = TestExecutor.getActionsByObject(org.automonius.Actions.ActionLibrary.class);
         ObservableList<String> objectOptions = FXCollections.observableArrayList(actionsByObject.keySet());
         objectColumn.setCellFactory(col -> new TableCell<TestStep, String>() {
             @Override
@@ -747,14 +756,49 @@ public class MainController {
         tableView.getColumns().setAll(itemColumn, objectColumn, actionColumn, descriptionColumn, inputColumn);
     }
 
-    private void paintBackground() {
-        GraphicsContext gc = canvas.getGraphicsContext2D();
-        gc.setFill(Color.web("#1e1e1e")); // or use a gradient
-        gc.fillRect(0, 0, canvas.getWidth(), canvas.getHeight());
+    @FXML
+    private void handleRun(ActionEvent event) {
+        // Example: run the first row in the table
+        if (!tableView.getItems().isEmpty()) {
+            TestStep step = tableView.getItems().get(0); // or selected row
 
-        // Example: draw something inside
-        gc.setFill(Color.web("#4a90e2"));
-        gc.fillText("Canvas is working!", 20, 30);
+            // Build TestCase directly from the UI row
+            TestCase testCase = new TestCase(
+                    step.getObject(),
+                    step.getAction(),
+                    step.getDescription(),
+                    step.getInput()
+            );
+
+            // Run using the UI-provided input
+            Object resultObj = TestExecutor.runTest(testCase);
+            boolean result = resultObj instanceof Boolean && (Boolean) resultObj;
+
+            System.out.println("Result: " + result);
+
+            canvasPanelController.clearCanvas();
+            if (result) {
+                canvasPanelController.drawPassIcon(50, 50);
+            } else {
+                canvasPanelController.drawFailIcon(50, 50);
+            }
+        }
     }
+
+
+    public static TestCase getTestByAction(Class<?> clazz, String actionName) {
+        for (Method method : clazz.getDeclaredMethods()) {
+            if (method.isAnnotationPresent(ActionMeta.class)) {
+                ActionMeta meta = method.getAnnotation(ActionMeta.class);
+                if (method.getName().equals(actionName)) {
+                    return new TestCase(meta.objectName(), method.getName(),
+                            meta.description(), String.join(",", meta.inputs()));
+                }
+            }
+        }
+        return null;
+    }
+
+
 
 }
