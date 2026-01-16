@@ -8,6 +8,8 @@ import javafx.collections.ObservableList;
 import javafx.event.ActionEvent;
 import javafx.fxml.FXML;
 import javafx.scene.Scene;
+import javafx.scene.canvas.Canvas;
+import javafx.scene.canvas.GraphicsContext;
 import javafx.scene.control.*;
 import javafx.scene.control.cell.ComboBoxTableCell;
 import javafx.scene.control.cell.PropertyValueFactory;
@@ -15,10 +17,8 @@ import javafx.scene.control.cell.TextFieldTableCell;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.scene.input.*;
-import javafx.scene.layout.HBox;
-import javafx.scene.layout.Priority;
-import javafx.scene.layout.Region;
-import javafx.scene.layout.VBox;
+import javafx.scene.layout.*;
+import javafx.scene.paint.Color;
 import javafx.stage.Stage;
 import org.apache.poi.ss.usermodel.DataFormatter;
 import org.apache.poi.ss.usermodel.Row;
@@ -48,12 +48,22 @@ public class MainController {
     private TableColumn<TestStep, String> objectColumn;
     @FXML
     private TableColumn<TestStep, String> inputColumn;
-    @FXML private Button newSuiteBtn;
-    @FXML private Button subSuiteBtn;
-    @FXML private Button testScenarioBtn;
-    @FXML private Button deleteBtn;
-    @FXML private Label testExplorerLabel;
-    @FXML private TableColumn<TestStep, String> descriptionColumn;
+    @FXML
+    private Button newSuiteBtn;
+    @FXML
+    private Button subSuiteBtn;
+    @FXML
+    private Button testScenarioBtn;
+    @FXML
+    private Button deleteBtn;
+    @FXML
+    private Label testExplorerLabel;
+    @FXML
+    private TableColumn<TestStep, String> descriptionColumn;
+    @FXML private Canvas canvas;
+
+    @FXML private StackPane canvasWrapper;
+
     private final Map<String, List<TestStep>> scenarioSteps = new HashMap<>();
     // Cache of extra column names per scenario
     private final Map<String, List<String>> scenarioColumns = new HashMap<>();
@@ -63,6 +73,15 @@ public class MainController {
 
     @FXML
     public void initialize() {
+        // Bind canvas size to wrapper
+        canvas.widthProperty().bind(canvasWrapper.widthProperty());
+        canvas.heightProperty().bind(canvasWrapper.heightProperty());
+
+        // Repaint on resize
+        canvas.widthProperty().addListener((obs, oldVal, newVal) -> paintBackground());
+        canvas.heightProperty().addListener((obs, oldVal, newVal) -> paintBackground());
+
+        paintBackground();
 
         tableView.setFixedCellSize(30); // or whatever looks good
 
@@ -83,7 +102,7 @@ public class MainController {
         steps.add(new TestStep("", "", "", "")); // one default row
         scenarioSteps.put(key, steps);
 
-    // Show it immediately in the table
+        // Show it immediately in the table
         tableView.setItems(FXCollections.observableArrayList(steps));
 
 
@@ -92,8 +111,12 @@ public class MainController {
         treeView.setRoot(root);
 
         descriptionColumn.setCellValueFactory(new PropertyValueFactory<>("description"));
-        descriptionColumn.setCellFactory(TextFieldTableCell.forTableColumn());
+        descriptionColumn.setCellFactory(col -> new AutoCommitTextFieldTableCell<>());
         descriptionColumn.setOnEditCommit(event -> event.getRowValue().setDescription(event.getNewValue()));
+
+        inputColumn.setCellFactory(col -> new AutoCommitTextFieldTableCell<>());
+        inputColumn.setOnEditCommit(event -> event.getRowValue().setInput(event.getNewValue()));
+
 
         Map<String, List<String>> actionsByObject = Map.of(
                 "Web Browser", List.of("Open URL", "Click", "Type", "Navigate"),
@@ -254,7 +277,6 @@ public class MainController {
                 });
             }
         });
-
 
 
         testExplorerLabel.setGraphic(makeIcon("/icons/explorer.png", 50, 50));
@@ -454,8 +476,6 @@ public class MainController {
     }
 
 
-
-
     @FXML
     private void handleDelete(ActionEvent event) {
         TreeItem<TestNode> selected = treeView.getSelectionModel().getSelectedItem();
@@ -519,13 +539,11 @@ public class MainController {
         for (String colName : extras) {
             TableColumn<TestStep, String> extraColumn = new TableColumn<>(colName);
             extraColumn.setCellValueFactory(cellData -> cellData.getValue().getExtraProperty(colName));
-            extraColumn.setCellFactory(TextFieldTableCell.forTableColumn());
+            extraColumn.setCellFactory(col -> new AutoCommitTextFieldTableCell<>());
             extraColumn.setOnEditCommit(evt -> evt.getRowValue().setExtra(colName, evt.getNewValue()));
             tableView.getColumns().add(extraColumn);
         }
     }
-
-
 
 
     private void showError(String message) {
@@ -593,7 +611,7 @@ public class MainController {
 
         TableColumn<TestStep, String> extraColumn = new TableColumn<>(colName);
         extraColumn.setCellValueFactory(cellData -> cellData.getValue().getExtraProperty(colName));
-        extraColumn.setCellFactory(TextFieldTableCell.forTableColumn());
+        extraColumn.setCellFactory(col -> new AutoCommitTextFieldTableCell<>());
         extraColumn.setOnEditCommit(evt -> evt.getRowValue().setExtra(colName, evt.getNewValue()));
 
         tableView.getColumns().add(extraColumn);
@@ -601,9 +619,6 @@ public class MainController {
         // ✅ record column name for this scenario
         scenarioColumns.computeIfAbsent(key, k -> new ArrayList<>()).add(colName);
     }
-
-
-
 
 
     @FXML
@@ -624,8 +639,8 @@ public class MainController {
         return (cell == null) ? "" : formatter.formatCellValue(cell);
     }
 
-    private Map<String,Integer> buildColumnMap(Row header) {
-        Map<String,Integer> map = new HashMap<>();
+    private Map<String, Integer> buildColumnMap(Row header) {
+        Map<String, Integer> map = new HashMap<>();
         if (header != null) {
             for (int c = 0; c < header.getLastCellNum(); c++) {
                 String name = formatter.formatCellValue(header.getCell(c));
@@ -732,5 +747,14 @@ public class MainController {
         tableView.getColumns().setAll(itemColumn, objectColumn, actionColumn, descriptionColumn, inputColumn);
     }
 
+    private void paintBackground() {
+        GraphicsContext gc = canvas.getGraphicsContext2D();
+        gc.setFill(Color.web("#1e1e1e")); // or use a gradient
+        gc.fillRect(0, 0, canvas.getWidth(), canvas.getHeight());
+
+        // Example: draw something inside
+        gc.setFill(Color.web("#4a90e2"));
+        gc.fillText("Canvas is working!", 20, 30);
+    }
 
 }

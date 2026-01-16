@@ -1,9 +1,105 @@
+/* === Root background === */
+.anchor-pane {
+    -fx-background-color: linear-gradient(to bottom, #1e1e1e, #252526);
+    -fx-border-color: #3c3c3c;
+    -fx-border-width: 1;
+}
+/* Root background */
+.main-background {
+    -fx-background-color: linear-gradient(to bottom, #1e1e1e, #252526),
+                          linear-gradient(to right, #1e1e1e, #2a2d2e);
+    -fx-background-insets: 0, 1;
+    -fx-border-color: #3c3c3c;
+    -fx-border-width: 1;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.6), 12, 0.5, 0, 2);
+    -fx-padding: 12;
+}
+
+/* Canvas wrapper transparent, only border if needed */
+.canvas-wrapper {
+    -fx-background-color: transparent;
+    -fx-border-color: #3c3c3c;
+    -fx-border-width: 1;
+}
+
+/* === Labels === */
+.label {
+    -fx-text-fill: #dcdcdc;
+    -fx-font-family: "Segoe UI Semibold", sans-serif;
+    -fx-font-size: 15px;
+    -fx-font-weight: bold;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.8), 4, 0.5, 1, 1);
+}
+
 .explorer-label {
     -fx-font-size: 18px;
-    -fx-font-weight: bold;
-    -fx-text-fill: white;
     -fx-background-color: linear-gradient(to bottom, #4a90e2, #003366);
     -fx-background-radius: 10;
     -fx-padding: 0 40 0 0;
     -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.5), 6, 0.5, 2, 2);
+}
+
+/* === Buttons === */
+.button {
+    -fx-background-color: #2d2d30;
+    -fx-text-fill: #dcdcdc;
+    -fx-font-family: "Segoe UI", sans-serif;
+    -fx-font-size: 13px;
+    -fx-background-radius: 4;
+    -fx-border-radius: 4;
+    -fx-border-color: #3c3c3c;
+    -fx-border-width: 1;
+    -fx-padding: 6 12 6 12;
+    -fx-graphic-text-gap: 0;
+}
+.button:hover {
+    -fx-background-color: #3a3d41;
+}
+.button:pressed {
+    -fx-background-color: #007acc;
+    -fx-text-fill: white;
+}
+
+/* === TreeView === */
+.tree-view {
+    -fx-background-color: #1e1e1e;
+    -fx-text-fill: #dcdcdc;
+    -fx-font-family: "Segoe UI", sans-serif;
+    -fx-font-size: 13px;
+}
+.tree-cell {
+    -fx-background-color: transparent;
+    -fx-text-fill: #dcdcdc;
+    -fx-padding: 4 8 4 8;
+}
+.tree-cell:focused {
+    -fx-background-color: #2d2d30;
+}
+.tree-cell:selected {
+    -fx-background-color: #007acc;
+    -fx-text-fill: white;
+}
+.tree-cell:hover {
+    -fx-background-color: #3a3d41;
+}
+
+/* === TableView === */
+.table-view {
+    -fx-background-color: #1e1e1e;
+    -fx-table-cell-border-color: #3c3c3c;
+    -fx-border-color: #3c3c3c;
+    -fx-border-width: 1;
+}
+.table-view .column-header {
+    -fx-background-color: #2d2d30;
+    -fx-text-fill: #dcdcdc;
+    -fx-font-weight: bold;
+}
+.table-row-cell {
+    -fx-background-color: #1e1e1e;
+    -fx-text-fill: #dcdcdc;
+}
+.table-row-cell:selected {
+    -fx-background-color: #007acc;
+    -fx-text-fill: white;
 }

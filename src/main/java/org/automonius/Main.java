@@ -6,6 +6,8 @@ import javafx.scene.Scene;
 import javafx.scene.layout.AnchorPane;
 import javafx.stage.Stage;
 
+import java.util.Objects;
+
 public class Main extends Application {
 
     @Override
@@ -16,6 +18,7 @@ public class Main extends Application {
 
         // Create scene
         Scene scene = new Scene(root);
+        scene.getStylesheets().add(Objects.requireNonNull(getClass().getResource("/fxml/css/styles.css")).toExternalForm());
 
         // Set stage
         primaryStage.setTitle("Test Explorer");
