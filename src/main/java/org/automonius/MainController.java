@@ -1,0 +1,736 @@
+package org.automonius;
+
+import javafx.application.Platform;
+import javafx.beans.property.ReadOnlyStringWrapper;
+import javafx.beans.property.SimpleStringProperty;
+import javafx.collections.FXCollections;
+import javafx.collections.ObservableList;
+import javafx.event.ActionEvent;
+import javafx.fxml.FXML;
+import javafx.scene.Scene;
+import javafx.scene.control.*;
+import javafx.scene.control.cell.ComboBoxTableCell;
+import javafx.scene.control.cell.PropertyValueFactory;
+import javafx.scene.control.cell.TextFieldTableCell;
+import javafx.scene.image.Image;
+import javafx.scene.image.ImageView;
+import javafx.scene.input.*;
+import javafx.scene.layout.HBox;
+import javafx.scene.layout.Priority;
+import javafx.scene.layout.Region;
+import javafx.scene.layout.VBox;
+import javafx.stage.Stage;
+import org.apache.poi.ss.usermodel.DataFormatter;
+import org.apache.poi.ss.usermodel.Row;
+import org.apache.poi.ss.usermodel.Sheet;
+import org.apache.poi.ss.usermodel.Workbook;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+public class MainController {
+    @FXML
+    private TreeView<TestNode> treeView;
+    @FXML
+    private TableView<TestStep> tableView;
+    @FXML
+    private TableColumn<TestStep, String> itemColumn;
+    @FXML
+    private TableColumn<TestStep, String> actionColumn;
+    @FXML
+    private TableColumn<TestStep, String> objectColumn;
+    @FXML
+    private TableColumn<TestStep, String> inputColumn;
+    @FXML private Button newSuiteBtn;
+    @FXML private Button subSuiteBtn;
+    @FXML private Button testScenarioBtn;
+    @FXML private Button deleteBtn;
+    @FXML private Label testExplorerLabel;
+    @FXML private TableColumn<TestStep, String> descriptionColumn;
+    private final Map<String, List<TestStep>> scenarioSteps = new HashMap<>();
+    // Cache of extra column names per scenario
+    private final Map<String, List<String>> scenarioColumns = new HashMap<>();
+
+    private final DataFormatter formatter = new DataFormatter();
+
+
+    @FXML
+    public void initialize() {
+
+        tableView.setFixedCellSize(30); // or whatever looks good
+
+        // Root node
+        TreeItem<TestNode> root = new TreeItem<>(new TestNode("Directory Structure", NodeType.ROOT));
+        root.setExpanded(true);
+
+        // Default suite
+        TreeItem<TestNode> defaultSuite = new TreeItem<>(new TestNode("Suite 1", NodeType.SUITE));
+        defaultSuite.setExpanded(true);
+
+        TreeItem<TestNode> defaultScenario = new TreeItem<>(new TestNode("Test Suite", NodeType.TEST_SCENARIO));
+        defaultSuite.getChildren().add(defaultScenario);
+
+        // Seed the default TestSuite with one blank row
+        String key = makeKey(defaultScenario);
+        List<TestStep> steps = new ArrayList<>();
+        steps.add(new TestStep("", "", "", "")); // one default row
+        scenarioSteps.put(key, steps);
+
+    // Show it immediately in the table
+        tableView.setItems(FXCollections.observableArrayList(steps));
+
+
+        root.getChildren().add(defaultSuite);
+
+        treeView.setRoot(root);
+
+        descriptionColumn.setCellValueFactory(new PropertyValueFactory<>("description"));
+        descriptionColumn.setCellFactory(TextFieldTableCell.forTableColumn());
+        descriptionColumn.setOnEditCommit(event -> event.getRowValue().setDescription(event.getNewValue()));
+
+        Map<String, List<String>> actionsByObject = Map.of(
+                "Web Browser", List.of("Open URL", "Click", "Type", "Navigate"),
+                "Database", List.of("Connect", "Query", "Update", "Close"),
+                "API", List.of("Send Request", "Validate Response"),
+                "File System", List.of("Read File", "Write File", "Delete File")
+        );
+
+        // Make the table editable
+        tableView.setEditable(true);
+
+        itemColumn.setCellValueFactory(cellData ->
+                new ReadOnlyStringWrapper(String.valueOf(tableView.getItems().indexOf(cellData.getValue()) + 1))
+        );
+
+        itemColumn.setEditable(false);
+
+        itemColumn.setCellFactory(col -> new TableCell<TestStep, String>() {
+            @Override
+            protected void updateItem(String item, boolean empty) {
+                super.updateItem(item, empty);
+                setText(empty ? null : item);
+                setStyle("-fx-alignment: CENTER;"); // center horizontally
+            }
+        });
+
+        objectColumn.setCellValueFactory(new PropertyValueFactory<>("object"));
+        actionColumn.setCellValueFactory(new PropertyValueFactory<>("action"));
+        inputColumn.setCellValueFactory(new PropertyValueFactory<>("input"));
+
+        ObservableList<String> objectOptions = FXCollections.observableArrayList(actionsByObject.keySet());
+        objectColumn.setCellFactory(col -> new TableCell<TestStep, String>() {
+            @Override
+            protected void updateItem(String item, boolean empty) {
+                super.updateItem(item, empty);
+                if (empty || getTableRow() == null || getTableRow().getItem() == null) {
+                    setGraphic(null);
+                } else {
+                    TestStep step = getTableRow().getItem();
+
+                    ComboBox<String> combo = new ComboBox<>(objectOptions);
+                    combo.valueProperty().bindBidirectional(step.objectProperty());
+
+                    combo.valueProperty().addListener((obs, oldVal, newVal) -> {
+                        if (newVal != null) {
+                            List<String> methods = actionsByObject.getOrDefault(newVal, List.of());
+                            if (!methods.isEmpty()) step.setAction(methods.get(0));
+                        }
+                    });
+
+                    setGraphic(combo);
+                }
+            }
+        });
+
+
+        actionColumn.setCellFactory(col -> new TableCell<TestStep, String>() {
+            @Override
+            protected void updateItem(String item, boolean empty) {
+                super.updateItem(item, empty);
+                if (empty || getTableRow() == null || getTableRow().getItem() == null) {
+                    setGraphic(null);
+                } else {
+                    TestStep step = getTableRow().getItem();
+
+                    ComboBox<String> combo = new ComboBox<>(
+                            FXCollections.observableArrayList(actionsByObject.getOrDefault(step.getObject(), List.of()))
+                    );
+                    combo.valueProperty().bindBidirectional(step.actionProperty());
+
+                    setGraphic(combo);
+                }
+            }
+        });
+
+
+        actionColumn.setOnEditCommit(event -> event.getRowValue().setAction(event.getNewValue()));
+
+        inputColumn.setCellFactory(col -> new TableCell<TestStep, String>() {
+            @Override
+            protected void updateItem(String item, boolean empty) {
+                super.updateItem(item, empty);
+                setText(empty ? null : (item == null ? "" : item));
+            }
+
+            {
+                // This block runs in the context of a TableCell
+                setOnMouseClicked(event -> {
+                    if (!isEmpty()) {
+                        // Now getIndex() and getTableView() are valid
+                        TestStep step = getTableView().getItems().get(getIndex());
+
+                        TextArea editor = new TextArea(step.getInput());
+                        editor.setPrefWidth(600);
+                        editor.setPrefHeight(400);
+                        editor.setMinHeight(400);
+                        editor.setMaxHeight(400);
+
+                        // Prevent VBox from stretching editor vertically
+                        VBox.setVgrow(editor, Priority.NEVER);
+
+                        VBox box = new VBox(10, editor);
+                        Scene scene = new Scene(box);
+
+                        // Ctrl + / → toggle comment/uncomment on selected lines
+                        scene.getAccelerators().put(
+                                new KeyCodeCombination(KeyCode.SLASH, KeyCombination.CONTROL_DOWN),
+                                () -> {
+                                    IndexRange selection = editor.getSelection();
+                                    if (selection.getLength() > 0) {
+                                        String selectedText = editor.getText(selection.getStart(), selection.getEnd());
+                                        StringBuilder sb = new StringBuilder();
+
+                                        // Detect XML vs JSON by first non‑whitespace char
+                                        boolean isXml = selectedText.trim().startsWith("<");
+
+                                        String[] lines = selectedText.split("\n");
+                                        if (isXml) {
+                                            // Wrap the whole block in <!-- -->
+                                            if (selectedText.trim().startsWith("<!--")) {
+                                                // Uncomment XML
+                                                sb.append(selectedText.replaceAll("<!--", "").replaceAll("-->", ""));
+                                            } else {
+                                                // Comment XML
+                                                sb.append("<!--\n").append(selectedText).append("\n-->");
+                                            }
+                                        } else {
+                                            // JSON or plain text → line‑by‑line //
+                                            for (String line : lines) {
+                                                if (line.trim().startsWith("//")) {
+                                                    sb.append(line.replaceFirst("// ?", "")).append("\n");
+                                                } else {
+                                                    sb.append("// ").append(line).append("\n");
+                                                }
+                                            }
+                                        }
+
+                                        editor.replaceText(selection, sb.toString());
+                                    }
+                                }
+                        );
+
+                        // Ctrl + S → save and close
+                        scene.getAccelerators().put(
+                                new KeyCodeCombination(KeyCode.S, KeyCombination.CONTROL_DOWN),
+                                () -> {
+                                    step.setInput(editor.getText());
+                                    ((Stage) editor.getScene().getWindow()).close();
+                                }
+                        );
+
+                        Stage stage = new Stage();
+                        stage.setTitle("Edit Input");
+                        stage.setScene(scene);
+                        stage.show();
+
+                    }
+                });
+            }
+        });
+
+
+
+        testExplorerLabel.setGraphic(makeIcon("/icons/explorer.png", 50, 50));
+        testExplorerLabel.setContentDisplay(ContentDisplay.LEFT); // icon left of text
+
+
+        // Attach icons to buttons
+        newSuiteBtn.setGraphic(makeIcon("/icons/MainSuite.png", 20, 20));
+        subSuiteBtn.setGraphic(makeIcon("/icons/SubSuite.png", 20, 20));
+        testScenarioBtn.setGraphic(makeIcon("/icons/TestSuite.png", 20, 20));
+        deleteBtn.setGraphic(makeIcon("/icons/delete.png", 20, 20));
+
+        treeView.setCellFactory(tv -> {
+            TreeCell<TestNode> cell = new TreeCell<>() {
+                @Override
+                protected void updateItem(TestNode item, boolean empty) {
+                    super.updateItem(item, empty);
+
+                    if (empty || item == null) {
+                        setText(null);
+                        setGraphic(null);
+                    } else {
+                        setText(item.getName());
+
+                        // Choose icon based on type
+                        switch (item.getType()) {
+                            case ROOT:
+                                setGraphic(makeIcon("/icons/bank.png", 16, 16));
+                                break;
+                            case SUITE:
+                                setGraphic(makeIcon("/icons/MainSuite.png", 16, 16));
+                                break;
+                            case SUB_SUITE:
+                                setGraphic(makeIcon("/icons/SubSuite.png", 16, 16));
+                                break;
+                            case TEST_SCENARIO:
+                                setGraphic(makeIcon("/icons/TestSuite.png", 16, 16));
+                                break;
+                        }
+
+                    }
+                    setStyle(""); // reset style
+                }
+            };
+
+            // Drag detected
+            cell.setOnDragDetected(event -> {
+                if (!cell.isEmpty()) {
+                    Dragboard db = cell.startDragAndDrop(TransferMode.MOVE);
+                    ClipboardContent content = new ClipboardContent();
+                    content.putString(cell.getItem().getName()); // use TestNode name
+                    db.setContent(content);
+                    event.consume();
+                }
+            });
+
+            // Drag over
+            cell.setOnDragOver(event -> {
+                if (event.getGestureSource() != cell && !cell.isEmpty()) {
+                    TreeItem<TestNode> draggedItem = findItem(treeView.getRoot(),
+                            ((TreeCell<TestNode>) event.getGestureSource()).getItem().getName());
+                    TreeItem<TestNode> targetItem = cell.getTreeItem();
+
+                    if (isValidDrop(draggedItem, targetItem)) {
+                        event.acceptTransferModes(TransferMode.MOVE);
+                        cell.setStyle("-fx-background-color: lightgreen;"); // valid target
+                    } else {
+                        cell.setStyle("-fx-background-color: lightcoral;"); // invalid target
+                    }
+                }
+                event.consume();
+            });
+
+            // Drag exited → remove highlight
+            cell.setOnDragExited(event -> cell.setStyle(""));
+
+            // Drop
+            cell.setOnDragDropped(event -> {
+                Dragboard db = event.getDragboard();
+                boolean success = false;
+                if (db.hasString()) {
+                    TreeItem<TestNode> draggedItem = findItem(treeView.getRoot(), db.getString());
+                    TreeItem<TestNode> targetItem = cell.getTreeItem();
+
+                    if (draggedItem != null && targetItem != null && isValidDrop(draggedItem, targetItem)) {
+                        draggedItem.getParent().getChildren().remove(draggedItem);
+                        targetItem.getChildren().add(draggedItem);
+                        success = true;
+                    } else {
+                        showError("Invalid drop target for " +
+                                (draggedItem != null ? draggedItem.getValue().getName() : ""));
+                    }
+                }
+                event.setDropCompleted(success);
+                event.consume();
+            });
+
+            return cell;
+        });
+
+        // Listener: when TestScenario selected, load its steps
+        treeView.getSelectionModel().selectedItemProperty().addListener((obs, oldVal, newVal) -> {
+            if (oldVal != null && oldVal.getValue().getType() == NodeType.TEST_SCENARIO) {
+                saveTestScenario(oldVal);
+            }
+            if (newVal != null && newVal.getValue().getType() == NodeType.TEST_SCENARIO) {
+                loadTestScenario(newVal);
+            } else {
+                tableView.getItems().clear();
+            }
+        });
+
+
+        // Ctrl+S shortcut
+        Platform.runLater(() -> {
+            treeView.sceneProperty().addListener((obs, oldScene, newScene) -> {
+                if (newScene != null) {
+                    newScene.addEventFilter(KeyEvent.KEY_PRESSED, event -> {
+                        if (new KeyCodeCombination(KeyCode.S, KeyCombination.CONTROL_DOWN).match(event)) {
+                            TreeItem<TestNode> selected = treeView.getSelectionModel().getSelectedItem();
+                            if (selected != null && selected.getValue().getType() == NodeType.TEST_SCENARIO) {
+                                saveTestScenario(selected);
+                            }
+                            saveProject(); // export included
+                            event.consume();
+                        }
+
+                    });
+                }
+            });
+
+        });
+
+        tableView.getColumns().setAll(itemColumn, objectColumn, actionColumn, descriptionColumn, inputColumn);
+
+    }
+
+    @FXML
+    private void handleNewSuite(ActionEvent event) {
+        TreeItem<TestNode> root = treeView.getRoot();
+        if (root != null) {
+            int suiteCount = root.getChildren().size() + 1;
+            TreeItem<TestNode> newSuite = new TreeItem<>(new TestNode("Suite " + suiteCount, NodeType.SUITE));
+            newSuite.setExpanded(true);
+            root.getChildren().add(newSuite);
+        }
+    }
+
+    @FXML
+    private void handleNewSubSuite(ActionEvent event) {
+        TreeItem<TestNode> selected = treeView.getSelectionModel().getSelectedItem();
+        if (selected != null && selected.getValue().getType() == NodeType.SUITE) {
+            int subSuiteCount = selected.getChildren().size() + 1;
+            TreeItem<TestNode> subSuite = new TreeItem<>(new TestNode("Sub-Suite " + subSuiteCount, NodeType.SUB_SUITE));
+            subSuite.setExpanded(true);
+            selected.getChildren().add(subSuite);
+        } else {
+            System.out.println("Sub-Suite can only be added inside a Suite.");
+        }
+    }
+
+    @FXML
+    private void handleNewTestScenario(ActionEvent event) {
+        TreeItem<TestNode> selected = treeView.getSelectionModel().getSelectedItem();
+        if (selected != null &&
+                (selected.getValue().getType() == NodeType.SUITE || selected.getValue().getType() == NodeType.SUB_SUITE)) {
+
+            TextInputDialog dialog = new TextInputDialog("TestSuite");
+            dialog.setTitle("New TestSuite");
+            dialog.setHeaderText("Create a new TestSuite");
+            dialog.setContentText("Enter TestSuite name:");
+
+            dialog.showAndWait().ifPresent(name -> {
+                if (!name.trim().isEmpty()) {
+                    TreeItem<TestNode> testScenario = new TreeItem<>(
+                            new TestNode(name.trim(), NodeType.TEST_SCENARIO)
+                    );
+                    selected.getChildren().add(testScenario);
+
+                    // ✅ Seed with one blank row
+                    String key = makeKey(testScenario);
+                    List<TestStep> steps = new ArrayList<>();
+                    steps.add(new TestStep("", "", "", ""));
+                    scenarioSteps.put(key, steps);
+
+                    // If this new scenario is selected immediately, show it
+                    if (treeView.getSelectionModel().getSelectedItem() == testScenario) {
+                        tableView.setItems(FXCollections.observableArrayList(steps));
+                    }
+                } else {
+                    showError("Name cannot be empty.");
+                }
+            });
+        } else {
+            showError("TestScenario can only be added inside a Suite or Sub-Suite.");
+        }
+    }
+
+
+
+
+    @FXML
+    private void handleDelete(ActionEvent event) {
+        TreeItem<TestNode> selected = treeView.getSelectionModel().getSelectedItem();
+        if (selected != null && selected.getParent() != null) {
+            selected.getParent().getChildren().remove(selected);
+        }
+    }
+
+
+    @FXML
+    private void handleSave(ActionEvent event) {
+        TreeItem<TestNode> selected = treeView.getSelectionModel().getSelectedItem();
+        if (selected != null && selected.getValue().getType() == NodeType.TEST_SCENARIO) {
+            saveTestScenario(selected);
+        }
+        // Always export project when saving
+        saveProject();
+    }
+
+
+    private void saveTestScenario(TreeItem<TestNode> scenario) {
+        String key = makeKey(scenario);
+        List<TestStep> copy = new ArrayList<>();
+        int rowNum = 1;
+        for (TestStep step : tableView.getItems()) {
+            TestStep clone = new TestStep(String.valueOf(rowNum++),
+                    step.getAction(),
+                    step.getObject(),
+                    step.getInput());
+            clone.setDescription(step.getDescription());
+
+            // Copy extras
+            for (Map.Entry<String, SimpleStringProperty> entry : step.getExtras().entrySet()) {
+                clone.setExtra(entry.getKey(), entry.getValue().get());
+            }
+
+            copy.add(clone);
+        }
+        scenarioSteps.put(key, copy);
+    }
+
+    private void loadTestScenario(TreeItem<TestNode> scenario) {
+        tableView.getColumns().setAll(itemColumn, objectColumn, actionColumn, descriptionColumn, inputColumn);
+
+        String key = makeKey(scenario);
+        List<TestStep> steps = scenarioSteps.getOrDefault(key, new ArrayList<>());
+
+        ObservableList<TestStep> clonedSteps = FXCollections.observableArrayList();
+        for (TestStep step : steps) {
+            TestStep clone = new TestStep(step.getItem(), step.getAction(), step.getObject(), step.getInput());
+            clone.setDescription(step.getDescription());
+            for (Map.Entry<String, SimpleStringProperty> entry : step.getExtras().entrySet()) {
+                clone.setExtra(entry.getKey(), entry.getValue().get());
+            }
+            clonedSteps.add(clone);
+        }
+
+        tableView.setItems(clonedSteps);
+
+        List<String> extras = scenarioColumns.getOrDefault(key, List.of());
+        for (String colName : extras) {
+            TableColumn<TestStep, String> extraColumn = new TableColumn<>(colName);
+            extraColumn.setCellValueFactory(cellData -> cellData.getValue().getExtraProperty(colName));
+            extraColumn.setCellFactory(TextFieldTableCell.forTableColumn());
+            extraColumn.setOnEditCommit(evt -> evt.getRowValue().setExtra(colName, evt.getNewValue()));
+            tableView.getColumns().add(extraColumn);
+        }
+    }
+
+
+
+
+    private void showError(String message) {
+        Alert alert = new Alert(Alert.AlertType.ERROR);
+        alert.setTitle("Invalid Action");
+        alert.setHeaderText(null);
+        alert.setContentText(message);
+        alert.showAndWait();
+    }
+
+
+    private TreeItem<TestNode> findItem(TreeItem<TestNode> root, String name) {
+        if (root.getValue().getName().equals(name)) return root;
+        for (TreeItem<TestNode> child : root.getChildren()) {
+            TreeItem<TestNode> result = findItem(child, name);
+            if (result != null) return result;
+        }
+        return null;
+    }
+
+    private boolean isValidDrop(TreeItem<TestNode> dragged, TreeItem<TestNode> target) {
+        if (dragged == null || target == null) return false;
+
+        NodeType dType = dragged.getValue().getType();
+        NodeType tType = target.getValue().getType();
+
+        if (dType == NodeType.SUITE && tType == NodeType.ROOT) return true;
+        if (dType == NodeType.SUB_SUITE && tType == NodeType.SUITE) return true;
+        if (dType == NodeType.TEST_SCENARIO && (tType == NodeType.SUITE || tType == NodeType.SUB_SUITE)) return true;
+
+        return false;
+    }
+
+    private ImageView makeIcon(String path, double width, double height) {
+        ImageView icon = new ImageView(new Image(getClass().getResourceAsStream(path)));
+        icon.setFitWidth(width);
+        icon.setFitHeight(height);
+        icon.setPreserveRatio(true);
+        return icon;
+    }
+
+    @FXML
+    private void handleAddRow(ActionEvent event) {
+        int nextIndex = tableView.getItems().size() + 1;
+        tableView.getItems().add(new TestStep("", "", "", ""));
+    }
+
+    @FXML
+    private void handleDeleteRow(ActionEvent event) {
+        if (!tableView.getItems().isEmpty()) {
+            tableView.getItems().remove(tableView.getItems().size() - 1);
+        }
+    }
+
+    @FXML
+    private void handleAddColumn(ActionEvent event) {
+        TreeItem<TestNode> selected = treeView.getSelectionModel().getSelectedItem();
+        if (selected == null || selected.getValue().getType() != NodeType.TEST_SCENARIO) {
+            showError("Extra columns can only be added inside a TestScenario.");
+            return;
+        }
+
+        String key = makeKey(selected);
+        String colName = "Extra" + (tableView.getColumns().size() - 4);
+
+        TableColumn<TestStep, String> extraColumn = new TableColumn<>(colName);
+        extraColumn.setCellValueFactory(cellData -> cellData.getValue().getExtraProperty(colName));
+        extraColumn.setCellFactory(TextFieldTableCell.forTableColumn());
+        extraColumn.setOnEditCommit(evt -> evt.getRowValue().setExtra(colName, evt.getNewValue()));
+
+        tableView.getColumns().add(extraColumn);
+
+        // ✅ record column name for this scenario
+        scenarioColumns.computeIfAbsent(key, k -> new ArrayList<>()).add(colName);
+    }
+
+
+
+
+
+    @FXML
+    private void handleDeleteColumn(ActionEvent event) {
+        // number of default columns you want to protect
+        int defaultColumnCount = 5; // item, object, action, description, input
+
+        if (tableView.getColumns().size() > defaultColumnCount) {
+            tableView.getColumns().remove(tableView.getColumns().size() - 1);
+        } else {
+            showError("Default columns cannot be deleted.");
+        }
+    }
+
+    private String getCellString(Row row, int index) {
+        if (row == null) return "";
+        var cell = row.getCell(index);
+        return (cell == null) ? "" : formatter.formatCellValue(cell);
+    }
+
+    private Map<String,Integer> buildColumnMap(Row header) {
+        Map<String,Integer> map = new HashMap<>();
+        if (header != null) {
+            for (int c = 0; c < header.getLastCellNum(); c++) {
+                String name = formatter.formatCellValue(header.getCell(c));
+                if (!name.isBlank()) {
+                    map.put(name.trim(), c);
+                }
+            }
+        }
+        return map;
+    }
+
+    private String makeKey(TreeItem<TestNode> scenario) {
+        List<String> names = new ArrayList<>();
+        TreeItem<TestNode> current = scenario;
+        while (current != null && current.getValue().getType() != NodeType.ROOT) {
+            names.add(0, current.getValue().getName());
+            current = current.getParent();
+        }
+        return String.join("/", names);
+    }
+
+    private void saveProject() {
+        // Create project directory under resources
+        File projectDir = new File("src/main/resources/project");
+        if (!projectDir.exists()) {
+            projectDir.mkdirs();
+        }
+
+        for (TreeItem<TestNode> suite : treeView.getRoot().getChildren()) {
+            if (suite.getValue().getType() == NodeType.SUITE) {
+                Workbook workbook = new XSSFWorkbook();
+                Sheet sheet = workbook.createSheet(suite.getValue().getName());
+                int[] rowIndex = {0};
+
+                // ✅ Export all scenarios/sub-suites recursively
+                saveScenariosRecursive(sheet, suite, rowIndex);
+
+                // Write each suite to its own file
+                File outFile = new File(projectDir, suite.getValue().getName() + ".xlsx");
+                try (FileOutputStream out = new FileOutputStream(outFile)) {
+                    workbook.write(out);
+                } catch (IOException e) {
+                    showError("Failed to save suite " + suite.getValue().getName() + ": " + e.getMessage());
+                }
+            }
+        }
+        System.out.println("Project saved to " + projectDir.getAbsolutePath());
+    }
+
+
+    private void saveScenariosRecursive(Sheet sheet, TreeItem<TestNode> node, int[] rowIndex) {
+        NodeType type = node.getValue().getType();
+
+        if (type == NodeType.SUB_SUITE) {
+            Row row = sheet.createRow(rowIndex[0]++);
+            row.createCell(0).setCellValue("Sub-Suite: " + node.getValue().getName());
+        }
+
+        if (type == NodeType.TEST_SCENARIO) {
+            String key = makeKey(node);
+            List<TestStep> steps = scenarioSteps.getOrDefault(key, List.of());
+
+            // Scenario header row
+            Row row = sheet.createRow(rowIndex[0]++);
+            row.createCell(0).setCellValue("Scenario: " + node.getValue().getName());
+
+            // ✅ Build header row with default + extras
+            Row header = sheet.createRow(rowIndex[0]++);
+            int colIndex = 0;
+            header.createCell(colIndex++).setCellValue("Item");
+            header.createCell(colIndex++).setCellValue("Object");
+            header.createCell(colIndex++).setCellValue("Action");
+            header.createCell(colIndex++).setCellValue("Description");
+            header.createCell(colIndex++).setCellValue("Input");
+
+            List<String> extras = scenarioColumns.getOrDefault(key, List.of());
+            for (String colName : extras) {
+                header.createCell(colIndex++).setCellValue(colName);
+            }
+
+            // ✅ Write each step row with extras
+            for (TestStep step : steps) {
+                Row stepRow = sheet.createRow(rowIndex[0]++);
+                colIndex = 0;
+                stepRow.createCell(colIndex++).setCellValue(step.getItem());
+                stepRow.createCell(colIndex++).setCellValue(step.getObject());
+                stepRow.createCell(colIndex++).setCellValue(step.getAction());
+                stepRow.createCell(colIndex++).setCellValue(step.getDescription());
+                stepRow.createCell(colIndex++).setCellValue(step.getInput());
+
+                for (String colName : extras) {
+                    stepRow.createCell(colIndex++).setCellValue(step.getExtra(colName));
+                }
+            }
+        }
+
+        for (TreeItem<TestNode> child : node.getChildren()) {
+            saveScenariosRecursive(sheet, child, rowIndex);
+        }
+    }
+
+
+    private void resetDefaultColumns() {
+        tableView.getColumns().setAll(itemColumn, objectColumn, actionColumn, descriptionColumn, inputColumn);
+    }
+
+
+}
