@@ -123,8 +123,16 @@ public class MainController {
         root.getChildren().add(defaultSuite);
         treeView.setRoot(root);
 
+// ✅ Force initial selection on the TestScenario
+        Platform.runLater(() -> {
+            treeView.getSelectionModel().select(defaultScenario);
+            treeView.getFocusModel().focus(treeView.getRow(defaultScenario));
+        });
+
+
 
         // Setup columns
+        tableView.setEditable(true);
         descriptionColumn.setCellValueFactory(new PropertyValueFactory<>("description"));
         descriptionColumn.setCellFactory(col -> new AutoCommitTextFieldTableCell<>());
         descriptionColumn.setOnEditCommit(event -> event.getRowValue().setDescription(event.getNewValue()));

@@ -25,6 +25,8 @@ import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.Workbook;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import org.automonius.Actions.ActionLibrary;
+import org.automonius.Annotations.ActionMeta;
 import org.automonius.exec.TestCase;
 import org.automonius.exec.TestExecutor;
 
@@ -32,6 +34,7 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -91,18 +94,38 @@ public class MainController {
 
         String key = makeKey(defaultScenario);
 
-        // ✅ Seed with a sample TestCase from TestExecutor
-        List<TestStep> steps = new ArrayList<>();
-        TestCase sample = TestExecutor.getTests().get("Check File Readable");
-        steps.add(new TestStep(sample.getObjectName(), sample.getActionName(),
-                sample.getDescription(), sample.getInput()));
-        scenarioSteps.put(key, steps);
-        tableView.setItems(FXCollections.observableArrayList(steps));
+        // ✅ Use ObservableList directly
+        ObservableList<TestStep> steps = FXCollections.observableArrayList();
 
+// Optionally seed with a sample TestCase
+        TestCase sample = TestExecutor.getTestByAction(
+                org.automonius.Actions.ActionLibrary.class,
+                "checkFileReadable"
+        );
+
+        if (sample != null) {
+            steps.add(new TestStep(
+                    sample.getObjectName(),
+                    sample.getActionName(),
+                    sample.getDescription(),
+                    sample.getInput()
+            ));
+        }
+
+        // Add a blank row for user editing
+        steps.add(new TestStep("", "", "", ""));
+
+        // Bind to table and scenario map
+        tableView.setItems(steps);
+        scenarioSteps.put(key, steps);
+
+        // Tree setup
         root.getChildren().add(defaultSuite);
         treeView.setRoot(root);
 
+
         // Setup columns
+        tableView.setEditable(true);
         descriptionColumn.setCellValueFactory(new PropertyValueFactory<>("description"));
         descriptionColumn.setCellFactory(col -> new AutoCommitTextFieldTableCell<>());
         descriptionColumn.setOnEditCommit(event -> event.getRowValue().setDescription(event.getNewValue()));
@@ -133,7 +156,7 @@ public class MainController {
             }
         });
 
-        Map<String, List<String>> actionsByObject = TestExecutor.getActionsByObject();
+        Map<String, List<String>> actionsByObject = TestExecutor.getActionsByObject(org.automonius.Actions.ActionLibrary.class);
         ObservableList<String> objectOptions = FXCollections.observableArrayList(actionsByObject.keySet());
         objectColumn.setCellFactory(col -> new TableCell<TestStep, String>() {
             @Override
@@ -739,6 +762,8 @@ public class MainController {
         // Example: run the first row in the table
         if (!tableView.getItems().isEmpty()) {
             TestStep step = tableView.getItems().get(0); // or selected row
+
+            // Build TestCase directly from the UI row
             TestCase testCase = new TestCase(
                     step.getObject(),
                     step.getAction(),
@@ -746,7 +771,11 @@ public class MainController {
                     step.getInput()
             );
 
-            boolean result = TestExecutor.runTest(testCase);
+            // Run using the UI-provided input
+            Object resultObj = TestExecutor.runTest(testCase);
+            boolean result = resultObj instanceof Boolean && (Boolean) resultObj;
+
+            System.out.println("Result: " + result);
 
             canvasPanelController.clearCanvas();
             if (result) {
@@ -756,6 +785,21 @@ public class MainController {
             }
         }
     }
+
+
+    public static TestCase getTestByAction(Class<?> clazz, String actionName) {
+        for (Method method : clazz.getDeclaredMethods()) {
+            if (method.isAnnotationPresent(ActionMeta.class)) {
+                ActionMeta meta = method.getAnnotation(ActionMeta.class);
+                if (method.getName().equals(actionName)) {
+                    return new TestCase(meta.objectName(), method.getName(),
+                            meta.description(), String.join(",", meta.inputs()));
+                }
+            }
+        }
+        return null;
+    }
+
 
 
 }
