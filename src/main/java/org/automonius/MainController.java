@@ -220,25 +220,46 @@ public class MainController {
             }
 
             {
-                // This block runs in the context of a TableCell
                 setOnMouseClicked(event -> {
                     if (!isEmpty()) {
-                        // Now getIndex() and getTableView() are valid
                         TestStep step = getTableView().getItems().get(getIndex());
 
                         TextArea editor = new TextArea(step.getInput());
                         editor.setPrefWidth(600);
                         editor.setPrefHeight(400);
-                        editor.setMinHeight(400);
-                        editor.setMaxHeight(400);
+                        editor.setWrapText(true);
+                        editor.setStyle("-fx-font-family: Consolas; -fx-font-size: 12;");
 
-                        // Prevent VBox from stretching editor vertically
-                        VBox.setVgrow(editor, Priority.NEVER);
+                        Dialog<String> dialog = new Dialog<>();
+                        dialog.setTitle("Edit Input");
+                        dialog.setResizable(true);
 
-                        VBox box = new VBox(10, editor);
-                        Scene scene = new Scene(box);
+                        DialogPane pane = dialog.getDialogPane();
+                        pane.setContent(editor);
+                        pane.getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
 
-                        // Ctrl + / → toggle comment/uncomment on selected lines
+                        // Save on OK
+                        dialog.setResultConverter(button -> {
+                            if (button == ButtonType.OK) {
+                                return editor.getText();
+                            }
+                            return null;
+                        });
+
+                        // Keyboard shortcuts
+                        Scene scene = pane.getScene();
+
+                        // Ctrl+S → save and close
+                        scene.getAccelerators().put(
+                                new KeyCodeCombination(KeyCode.S, KeyCombination.CONTROL_DOWN),
+                                () -> {
+                                    step.setInput(editor.getText());
+                                    dialog.setResult(editor.getText());
+                                    dialog.close();
+                                }
+                        );
+
+                        // Ctrl+/ → comment/uncomment JSON or XML
                         scene.getAccelerators().put(
                                 new KeyCodeCombination(KeyCode.SLASH, KeyCombination.CONTROL_DOWN),
                                 () -> {
@@ -247,21 +268,16 @@ public class MainController {
                                         String selectedText = editor.getText(selection.getStart(), selection.getEnd());
                                         StringBuilder sb = new StringBuilder();
 
-                                        // Detect XML vs JSON by first non‑whitespace char
                                         boolean isXml = selectedText.trim().startsWith("<");
-
                                         String[] lines = selectedText.split("\n");
+
                                         if (isXml) {
-                                            // Wrap the whole block in <!-- -->
                                             if (selectedText.trim().startsWith("<!--")) {
-                                                // Uncomment XML
                                                 sb.append(selectedText.replaceAll("<!--", "").replaceAll("-->", ""));
                                             } else {
-                                                // Comment XML
                                                 sb.append("<!--\n").append(selectedText).append("\n-->");
                                             }
                                         } else {
-                                            // JSON or plain text → line‑by‑line //
                                             for (String line : lines) {
                                                 if (line.trim().startsWith("//")) {
                                                     sb.append(line.replaceFirst("// ?", "")).append("\n");
@@ -270,26 +286,16 @@ public class MainController {
                                                 }
                                             }
                                         }
-
                                         editor.replaceText(selection, sb.toString());
                                     }
                                 }
                         );
 
-                        // Ctrl + S → save and close
-                        scene.getAccelerators().put(
-                                new KeyCodeCombination(KeyCode.S, KeyCombination.CONTROL_DOWN),
-                                () -> {
-                                    step.setInput(editor.getText());
-                                    ((Stage) editor.getScene().getWindow()).close();
-                                }
-                        );
-
-                        Stage stage = new Stage();
-                        stage.setTitle("Edit Input");
-                        stage.setScene(scene);
-                        stage.show();
-
+                        dialog.showAndWait().ifPresent(result -> {
+                            if (result != null) {
+                                step.setInput(result);
+                            }
+                        });
                     }
                 });
             }
@@ -428,6 +434,7 @@ public class MainController {
         });
 
         tableView.getColumns().setAll(itemColumn, objectColumn, actionColumn, descriptionColumn, inputColumn);
+        tableView.setFixedCellSize(25);
 
     }
 
