@@ -518,7 +518,7 @@ public class MainController {
     private void handleNewSubSuite(ActionEvent event) {
         TreeItem<TestNode> selected = treeView.getSelectionModel().getSelectedItem();
         if (selected != null && selected.getValue().getType() == NodeType.SUITE) {
-            int subSuiteCount = selected.getChildren().size() + 1;
+            long subSuiteCount = selected.getChildren().stream() .filter(child -> child.getValue().getType() == NodeType.SUB_SUITE) .count() + 1;
             TreeItem<TestNode> subSuite = new TreeItem<>(new TestNode("Sub-Suite " + subSuiteCount, NodeType.SUB_SUITE));
             subSuite.setExpanded(true);
             selected.getChildren().add(subSuite);
