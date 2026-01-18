@@ -71,10 +71,11 @@ public class MainController {
     private TableColumn<TestStep, String> descriptionColumn;
     @FXML
     private CanvasController canvasPanelController;
+    @FXML
+    private TreeView<String> variablesTree;
 
     @FXML
     private StackPane canvasWrapper;
-
     private final Map<String, List<TestStep>> scenarioSteps = new HashMap<>();
     // Cache of extra column names per scenario
     private final Map<String, List<String>> scenarioColumns = new HashMap<>();
@@ -85,6 +86,44 @@ public class MainController {
 
     @FXML
     public void initialize() {
+
+        TreeItem<String> variablesRoot = new TreeItem<>("Variables");
+
+        // Web group
+        TreeItem<String> webGroup = new TreeItem<>("Web 🌐");
+        TreeItem<String> loginUrl = new TreeItem<>("loginUrl");
+        loginUrl.getChildren().addAll(
+                new TreeItem<>("staging.jp.bank/login"),
+                new TreeItem<>("staging.kr.bank/login")
+        );
+        webGroup.getChildren().add(loginUrl);
+
+        // API group
+        TreeItem<String> apiGroup = new TreeItem<>("API 🔌");
+        TreeItem<String> apiBaseUrl = new TreeItem<>("apiBaseUrl");
+        apiBaseUrl.getChildren().addAll(
+                new TreeItem<>("staging.jp.api.bank"),
+                new TreeItem<>("staging.kr.api.bank")
+        );
+        apiGroup.getChildren().add(apiBaseUrl);
+
+        // DB group
+        TreeItem<String> dbGroup = new TreeItem<>("Database 🗄️");
+        TreeItem<String> dbConnection = new TreeItem<>("dbConnection");
+        dbConnection.getChildren().addAll(
+                new TreeItem<>("jdbc:mysql://staging.jp.bank"),
+                new TreeItem<>("jdbc:mysql://staging.kr.bank")
+        );
+        dbGroup.getChildren().add(dbConnection);
+
+        variablesRoot.getChildren().addAll(webGroup, apiGroup, dbGroup);
+        variablesTree.setRoot(variablesRoot);
+        variablesRoot.setExpanded(true);
+
+        // --- Test Explorer TreeView setup ---
+        TreeItem<TestNode> explorerRoot = new TreeItem<>(new TestNode("Directory Structure", NodeType.ROOT));
+        explorerRoot.setExpanded(true);
+        treeView.setRoot(explorerRoot);
 
         // Root node setup
         TreeItem<TestNode> root = new TreeItem<>(new TestNode("Directory Structure", NodeType.ROOT));
@@ -1159,7 +1198,6 @@ public class MainController {
             tableView.getSelectionModel().select(index + 1);
         }
     }
-
 
 
 }
