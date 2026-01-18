@@ -559,11 +559,13 @@ public class MainController {
     }
 
     private void loadTestScenario(TreeItem<TestNode> scenario) {
+        // Reset to default columns
         tableView.getColumns().setAll(itemColumn, objectColumn, actionColumn, descriptionColumn, inputColumn);
 
         String key = makeKey(scenario);
         List<TestStep> steps = scenarioSteps.getOrDefault(key, new ArrayList<>());
 
+        // Clone steps so edits don’t mutate the original list directly
         ObservableList<TestStep> clonedSteps = FXCollections.observableArrayList();
         for (TestStep step : steps) {
             TestStep clone = new TestStep(step.getItem(), step.getAction(), step.getObject(), step.getInput());
@@ -576,6 +578,16 @@ public class MainController {
 
         tableView.setItems(clonedSteps);
 
+        // ✅ Re‑apply auto‑commit factories for description
+        descriptionColumn.setCellValueFactory(new PropertyValueFactory<>("description"));
+        descriptionColumn.setCellFactory(col -> new AutoCommitTextFieldTableCell<>());
+        descriptionColumn.setOnEditCommit(event -> event.getRowValue().setDescription(event.getNewValue()));
+
+        // ✅ Keep your custom dialog editor for inputColumn
+        inputColumn.setCellValueFactory(new PropertyValueFactory<>("input"));
+        // Do NOT overwrite inputColumn’s cellFactory here — it was already set up in initialize()
+
+        // ✅ Re‑apply auto‑commit factories for extras
         List<String> extras = scenarioColumns.getOrDefault(key, List.of());
         for (String colName : extras) {
             TableColumn<TestStep, String> extraColumn = new TableColumn<>(colName);
@@ -585,6 +597,7 @@ public class MainController {
             tableView.getColumns().add(extraColumn);
         }
     }
+
 
 
     private void showError(String message) {
