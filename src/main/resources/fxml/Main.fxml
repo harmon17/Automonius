@@ -25,15 +25,6 @@
                     AnchorPane.rightAnchor="14.0"
                     AnchorPane.leftAnchor="850.0"/>
 
-        <!-- Test Explorer -->
-<!--        <VBox AnchorPane.topAnchor="122.0" AnchorPane.leftAnchor="19.0"-->
-<!--              prefHeight="350.0" prefWidth="206.0">-->
-<!--            <children>-->
-<!--                <Label fx:id="testExplorerLabel" styleClass="explorer-label" text="Test Explorer"/>-->
-<!--                <TreeView fx:id="treeView" prefHeight="209.0" prefWidth="457.0"/>-->
-<!--            </children>-->
-<!--        </VBox>-->
-
         <!-- Table controls toolbar aligned with TableView -->
         <HBox AnchorPane.topAnchor="90.0" AnchorPane.leftAnchor="245.0"
               prefHeight="32.0" prefWidth="582.0" spacing="8"
@@ -83,12 +74,15 @@
         <HBox AnchorPane.topAnchor="14.0" AnchorPane.leftAnchor="14.0"
               prefHeight="34.0" prefWidth="600.0" spacing="10">
             <children>
-                <Button fx:id="runBtn" text="Run" onAction="#handleRun">
+                <Button fx:id="runBtn" onAction="#handleRun">
+                    <graphic><FontIcon iconLiteral="mdi-play-circle-outline" iconSize="18"/></graphic>
                     <tooltip><Tooltip text="Run the current scenario"/></tooltip>
                 </Button>
-                <Button fx:id="saveBtn" text="Save" onAction="#handleSave">
+                <Button fx:id="saveBtn" onAction="#handleSave">
+                    <graphic><FontIcon iconLiteral="mdi-content-save" iconSize="18"/></graphic>
                     <tooltip><Tooltip text="Save current scenario and project"/></tooltip>
                 </Button>
+
             </children>
         </HBox>
 
