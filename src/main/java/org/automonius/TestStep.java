@@ -25,7 +25,6 @@ public class TestStep {
         this.object = new SimpleStringProperty(object == null ? "" : object);
         this.input = new SimpleStringProperty(input == null ? "" : input);
         this.description = new SimpleStringProperty("");
-        // ❌ removed "this.extra" — no single extra field anymore
     }
 
     // --- Getters ---
@@ -65,5 +64,13 @@ public class TestStep {
     // Optional: expose all extras for cloning/export
     public Map<String, SimpleStringProperty> getExtras() {
         return extras;
+    }
+
+    // ✅ Optional setter to replace the entire extras map
+    public void setExtras(Map<String, String> newExtras) {
+        extras.clear();
+        if (newExtras != null) {
+            newExtras.forEach((k, v) -> extras.put(k, new SimpleStringProperty(v)));
+        }
     }
 }

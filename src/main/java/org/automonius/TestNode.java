@@ -1,7 +1,7 @@
 package org.automonius;
 
 public class TestNode {
-    private final String name;
+    private String name;       // ✅ remove 'final' so it can be changed
     private final NodeType type;
 
     public TestNode(String name, NodeType type) {
@@ -9,8 +9,20 @@ public class TestNode {
         this.type = type;
     }
 
-    public String getName() { return name; }
-    public NodeType getType() { return type; }
+    // --- Getter ---
+    public String getName() {
+        return name;
+    }
+
+    // --- Setter (needed for renaming) ---
+    public void setName(String name) {
+        this.name = name;
+    }
+
+    // --- Getter for type ---
+    public NodeType getType() {
+        return type;
+    }
 
     @Override
     public String toString() {
