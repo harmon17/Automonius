@@ -4,6 +4,7 @@
 <?import javafx.scene.layout.*?>
 <?import java.net.URL?>
 
+<?import org.kordamp.ikonli.javafx.FontIcon?>
 <AnchorPane fx:id="rootPane"
             styleClass="main-background"
             prefHeight="783.0" prefWidth="1165.0"
@@ -25,13 +26,45 @@
                     AnchorPane.leftAnchor="850.0"/>
 
         <!-- Test Explorer -->
-        <VBox AnchorPane.topAnchor="122.0" AnchorPane.leftAnchor="19.0"
-              prefHeight="350.0" prefWidth="206.0">
+<!--        <VBox AnchorPane.topAnchor="122.0" AnchorPane.leftAnchor="19.0"-->
+<!--              prefHeight="350.0" prefWidth="206.0">-->
+<!--            <children>-->
+<!--                <Label fx:id="testExplorerLabel" styleClass="explorer-label" text="Test Explorer"/>-->
+<!--                <TreeView fx:id="treeView" prefHeight="209.0" prefWidth="457.0"/>-->
+<!--            </children>-->
+<!--        </VBox>-->
+
+        <!-- Table controls toolbar aligned with TableView -->
+        <HBox AnchorPane.topAnchor="90.0" AnchorPane.leftAnchor="245.0"
+              prefHeight="32.0" prefWidth="582.0" spacing="8"
+              alignment="CENTER_RIGHT">
             <children>
-                <Label fx:id="testExplorerLabel" styleClass="explorer-label" text="Test Explorer"/>
-                <TreeView fx:id="treeView" prefHeight="209.0" prefWidth="457.0"/>
+                <Button fx:id="AddRow" onAction="#handleAddRow">
+                    <graphic><FontIcon iconLiteral="mdi-plus" iconSize="16"/></graphic>
+                    <tooltip><Tooltip text="Add a new row"/></tooltip>
+                </Button>
+                <Button fx:id="DeleteRow" onAction="#handleDeleteRow">
+                    <graphic><FontIcon iconLiteral="mdi-minus" iconSize="16"/></graphic>
+                    <tooltip><Tooltip text="Delete selected row"/></tooltip>
+                </Button>
+                <Button fx:id="AddColumn" onAction="#handleAddColumn">
+                    <graphic><FontIcon iconLiteral="mdi-table-column-plus-after" iconSize="16"/></graphic>
+                    <tooltip><Tooltip text="Add a new column"/></tooltip>
+                </Button>
+                <Button fx:id="DeleteColumn" onAction="#handleDeleteColumn">
+                    <graphic><FontIcon iconLiteral="mdi-table-column-remove" iconSize="16"/></graphic>
+                    <tooltip><Tooltip text="Delete selected column"/></tooltip>
+                </Button>
+                <Button fx:id="MoveUp" onAction="#handleMoveUp">
+                    <graphic><FontIcon iconLiteral="mdi-arrow-up" iconSize="16"/></graphic>
+                    <tooltip><Tooltip text="Move selected row up"/></tooltip>
+                </Button>
+                <Button fx:id="MoveDown" onAction="#handleMoveDown">
+                    <graphic><FontIcon iconLiteral="mdi-arrow-down" iconSize="16"/></graphic>
+                    <tooltip><Tooltip text="Move selected row down"/></tooltip>
+                </Button>
             </children>
-        </VBox>
+        </HBox>
 
         <!-- TableView -->
         <TableView fx:id="tableView"
@@ -59,42 +92,41 @@
             </children>
         </HBox>
 
-        <!-- Explorer controls -->
-        <HBox AnchorPane.topAnchor="80.0" AnchorPane.leftAnchor="19.0"
-              prefHeight="42.0" prefWidth="400.0" spacing="10">
+        <!-- Test Explorer -->
+        <VBox AnchorPane.topAnchor="122.0" AnchorPane.leftAnchor="19.0"
+              prefHeight="350.0" prefWidth="206.0" spacing="6">
             <children>
-                <Button fx:id="newSuiteBtn" text="New Suite" onAction="#handleNewSuite">
-                    <tooltip><Tooltip text="Create a new Suite"/></tooltip>
-                </Button>
-                <Button fx:id="subSuiteBtn" text="Sub-Suite" onAction="#handleNewSubSuite">
-                    <tooltip><Tooltip text="Add a Sub-Suite inside a Suite"/></tooltip>
-                </Button>
-                <Button fx:id="testScenarioBtn" text="TestScenario" onAction="#handleNewTestScenario">
-                    <tooltip><Tooltip text="Add a TestScenario inside a Suite or Sub-Suite"/></tooltip>
-                </Button>
-                <Button fx:id="deleteBtn" text="Delete" onAction="#handleDelete">
-                    <tooltip><Tooltip text="Delete the selected node"/></tooltip>
-                </Button>
-            </children>
-        </HBox>
+                <!-- Label at the top -->
+                <Label fx:id="testExplorerLabel" styleClass="explorer-label" text="Test Explorer"/>
 
-        <!-- Table controls -->
-        <HBox AnchorPane.topAnchor="472.0" AnchorPane.leftAnchor="245.0"
-              prefHeight="42.0" prefWidth="400.0" spacing="10">
-            <children>
-                <Button fx:id="AddRow" text="Add Row" onAction="#handleAddRow">
-                    <tooltip><Tooltip text="Add a new row to the table"/></tooltip>
-                </Button>
-                <Button fx:id="DeleteRow" text="Delete Row" onAction="#handleDeleteRow">
-                    <tooltip><Tooltip text="Delete the selected row"/></tooltip>
-                </Button>
-                <Button fx:id="AddColumn" text="Add Column" onAction="#handleAddColumn">
-                    <tooltip><Tooltip text="Add a new column to the table"/></tooltip>
-                </Button>
-                <Button fx:id="DeleteColumn" text="Delete Column" onAction="#handleDeleteColumn">
-                    <tooltip><Tooltip text="Delete the selected column"/></tooltip>
-                </Button>
+                <!-- Toolbar directly under the label -->
+                <HBox spacing="8" alignment="CENTER_LEFT">
+                    <children>
+                        <Button fx:id="newSuiteBtn" onAction="#handleNewSuite">
+                            <graphic><FontIcon iconLiteral="mdi-folder" iconSize="16"/></graphic>
+                            <tooltip><Tooltip text="New Suite"/></tooltip>
+                        </Button>
+                        <Button fx:id="subSuiteBtn" onAction="#handleNewSubSuite">
+                            <graphic><FontIcon iconLiteral="mdi-folder-multiple" iconSize="16"/></graphic>
+                            <tooltip><Tooltip text="Sub-Suite"/></tooltip>
+                        </Button>
+                        <Button fx:id="testScenarioBtn" onAction="#handleNewTestScenario">
+                            <graphic><FontIcon iconLiteral="mdi-file-document" iconSize="16"/></graphic>
+                            <tooltip><Tooltip text="Test Scenario"/></tooltip>
+                        </Button>
+                        <Button fx:id="deleteBtn" onAction="#handleDelete">
+                            <graphic><FontIcon iconLiteral="mdi-delete" iconSize="16"/></graphic>
+                            <tooltip><Tooltip text="Delete"/></tooltip>
+                        </Button>
+                    </children>
+                </HBox>
+
+                <!-- TreeView below the toolbar -->
+                <TreeView fx:id="treeView" prefHeight="209.0" prefWidth="457.0"/>
             </children>
-        </HBox>
+        </VBox>
+
+
+
     </children>
 </AnchorPane>

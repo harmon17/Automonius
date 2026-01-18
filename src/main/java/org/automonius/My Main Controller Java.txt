@@ -1,5 +1,9 @@
 package org.automonius;
 
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import javafx.application.Platform;
 import javafx.beans.property.ReadOnlyStringWrapper;
 import javafx.beans.property.SimpleStringProperty;
@@ -130,7 +134,6 @@ public class MainController {
         });
 
 
-
         // Setup columns
         tableView.setEditable(true);
         descriptionColumn.setCellValueFactory(new PropertyValueFactory<>("description"));
@@ -139,8 +142,6 @@ public class MainController {
 
         inputColumn.setCellFactory(col -> new AutoCommitTextFieldTableCell<>());
         inputColumn.setOnEditCommit(event -> event.getRowValue().setInput(event.getNewValue()));
-
-
 
 
         objectColumn.setCellValueFactory(new PropertyValueFactory<>("object"));
@@ -367,46 +368,130 @@ public class MainController {
                 if (cell.getItem() != null) {
                     NodeType type = cell.getItem().getType();
                     String name = cell.getItem().getName();
+
                     ClipboardContent content = new ClipboardContent();
-                    content.putString(type + "::" + name); // e.g., SUB_SUITE::Sub-Suite 1
+
+                    if (type == NodeType.TEST_SCENARIO) {
+                        String scenarioKey = makeKey(cell.getTreeItem());
+                        List<TestStep> scenarioData = scenarioSteps.getOrDefault(scenarioKey, List.of());
+                        List<String> columns = scenarioColumns.getOrDefault(scenarioKey, List.of());
+
+                        JsonObject json = new JsonObject();
+                        json.addProperty("type", type.name());
+                        json.addProperty("name", name);
+
+                        JsonArray stepArray = new JsonArray();
+                        for (TestStep step : scenarioData) {
+                            JsonObject s = new JsonObject();
+                            s.addProperty("item", step.getItem());
+                            s.addProperty("action", step.getAction());
+                            s.addProperty("object", step.getObject());
+                            s.addProperty("input", step.getInput());
+                            s.addProperty("description", step.getDescription());
+
+                            JsonObject extras = new JsonObject();
+                            step.getExtras().forEach((k, v) -> extras.addProperty(k, v.get()));
+                            s.add("extras", extras);
+
+                            stepArray.add(s);
+                        }
+                        json.add("steps", stepArray);
+
+                        JsonArray colArray = new JsonArray();
+                        columns.forEach(colArray::add);
+                        json.add("columns", colArray);
+
+                        content.putString(json.toString());
+                    } else {
+                        content.putString(type + "::" + name);
+                    }
+
                     Clipboard clipboard = Clipboard.getSystemClipboard();
                     clipboard.setContent(content);
                 }
             });
 
+
             MenuItem pasteItem = new MenuItem("Paste");
             pasteItem.setOnAction(e -> {
                 Clipboard clipboard = Clipboard.getSystemClipboard();
                 if (clipboard.hasString()) {
-                    String[] parts = clipboard.getString().split("::", 2);
-                    if (parts.length == 2) {
-                        NodeType copiedType = NodeType.valueOf(parts[0]);
-                        String pastedName = parts[1];
-                        TreeItem<TestNode> target = cell.getTreeItem();
+                    String data = clipboard.getString();
+                    TreeItem<TestNode> target = cell.getTreeItem();
 
-                        if (target != null) {
-                            // ✅ Validate hierarchy using your existing rules
+                    if (target != null) {
+                        try {
+                            // Try JSON payload (TestScenario copy)
+                            JsonObject json = JsonParser.parseString(data).getAsJsonObject();
+                            NodeType copiedType = NodeType.valueOf(json.get("type").getAsString());
+                            String pastedName = json.get("name").getAsString();
+
                             if (isValidDrop(new TreeItem<>(new TestNode(pastedName, copiedType)), target)) {
                                 TreeItem<TestNode> newNode = new TreeItem<>(new TestNode(pastedName, copiedType));
                                 target.getChildren().add(newNode);
 
-                                // ✅ Only seed TableView data if it's a TestScenario
                                 if (copiedType == NodeType.TEST_SCENARIO) {
-                                    scenarioSteps.put(makeKey(newNode), new ArrayList<>(List.of(new TestStep("", "", "", ""))));
-                                    scenarioColumns.put(makeKey(newNode), new ArrayList<>());
+                                    String scenarioKey = makeKey(newNode);
+
+                                    // Rebuild steps
+                                    List<TestStep> rebuiltSteps = new ArrayList<>();
+                                    for (JsonElement el : json.getAsJsonArray("steps")) {
+                                        JsonObject s = el.getAsJsonObject();
+                                        TestStep step = new TestStep(
+                                                s.get("item").getAsString(),
+                                                s.get("action").getAsString(),
+                                                s.get("object").getAsString(),
+                                                s.get("input").getAsString()
+                                        );
+                                        step.setDescription(s.get("description").getAsString());
+
+                                        JsonObject extras = s.getAsJsonObject("extras");
+                                        for (String k : extras.keySet()) {
+                                            step.setExtra(k, extras.get(k).getAsString());
+                                        }
+                                        rebuiltSteps.add(step);
+                                    }
+                                    scenarioSteps.put(scenarioKey, rebuiltSteps);
+
+                                    // Rebuild columns
+                                    List<String> rebuiltColumns = new ArrayList<>();
+                                    for (JsonElement col : json.getAsJsonArray("columns")) {
+                                        rebuiltColumns.add(col.getAsString());
+                                    }
+                                    scenarioColumns.put(scenarioKey, rebuiltColumns);
                                 }
                             } else {
                                 showError(copiedType + " can only be pasted inside a valid parent.");
+                            }
+
+                        } catch (Exception ex) {
+                            // Fallback: simple type::name string
+                            String[] parts = data.split("::", 2);
+                            if (parts.length == 2) {
+                                NodeType copiedType = NodeType.valueOf(parts[0]);
+                                String pastedName = parts[1];
+
+                                if (isValidDrop(new TreeItem<>(new TestNode(pastedName, copiedType)), target)) {
+                                    TreeItem<TestNode> newNode = new TreeItem<>(new TestNode(pastedName, copiedType));
+                                    target.getChildren().add(newNode);
+
+                                    if (copiedType == NodeType.TEST_SCENARIO) {
+                                        scenarioSteps.put(makeKey(newNode),
+                                                new ArrayList<>(List.of(new TestStep("", "", "", ""))));
+                                        scenarioColumns.put(makeKey(newNode), new ArrayList<>());
+                                    }
+                                } else {
+                                    showError(copiedType + " can only be pasted inside a valid parent.");
+                                }
                             }
                         }
                     }
                 }
             });
 
+
             menu.getItems().addAll(renameItem, copyItem, pasteItem);
             cell.setContextMenu(menu);
-
-
 
             // Drag detected
             cell.setOnDragDetected(event -> {
@@ -516,6 +601,52 @@ public class MainController {
         tableView.getColumns().setAll(itemColumn, objectColumn, actionColumn, descriptionColumn, inputColumn);
         tableView.setFixedCellSize(25);
 
+        // 👉 Add TableView context menu here
+        ContextMenu tableMenu = new ContextMenu();
+
+        MenuItem copyRowItem = new MenuItem("Copy Row");
+        copyRowItem.setOnAction(e -> {
+            TestStep selectedStep = tableView.getSelectionModel().getSelectedItem();
+            if (selectedStep != null) {
+                ClipboardContent content = new ClipboardContent();
+                StringBuilder sb = new StringBuilder();
+                sb.append(selectedStep.getItem()).append("|")
+                        .append(selectedStep.getAction()).append("|")
+                        .append(selectedStep.getObject()).append("|")
+                        .append(selectedStep.getInput()).append("|")
+                        .append(selectedStep.getDescription());
+                selectedStep.getExtras().forEach((k, v) -> sb.append("|").append(k).append("=").append(v.get()));
+                content.putString(sb.toString());
+                Clipboard.getSystemClipboard().setContent(content);
+            }
+        });
+
+        MenuItem pasteRowItem = new MenuItem("Paste Row");
+        pasteRowItem.setOnAction(e -> {
+            Clipboard clipboard = Clipboard.getSystemClipboard();
+            if (clipboard.hasString()) {
+                String[] parts = clipboard.getString().split("\\|");
+                if (parts.length >= 5) {
+                    TestStep newStep = new TestStep(parts[0], parts[1], parts[2], parts[3]);
+                    newStep.setDescription(parts[4]);
+                    for (int i = 5; i < parts.length; i++) {
+                        String[] kv = parts[i].split("=", 2);
+                        if (kv.length == 2) newStep.setExtra(kv[0], kv[1]);
+                    }
+                    int index = tableView.getSelectionModel().getSelectedIndex();
+                    if (index >= 0) {
+                        tableView.getItems().add(index + 1, newStep);
+                    } else {
+                        tableView.getItems().add(newStep);
+                    }
+                }
+            }
+        });
+
+        tableMenu.getItems().addAll(copyRowItem, pasteRowItem);
+        tableView.setContextMenu(tableMenu);
+
+
     }
 
     @FXML
@@ -580,7 +711,6 @@ public class MainController {
             showError("TestScenario can only be added inside a Suite or Sub-Suite.");
         }
     }
-
 
 
     @FXML
@@ -665,7 +795,6 @@ public class MainController {
     }
 
 
-
     private void showError(String message) {
         Alert alert = new Alert(Alert.AlertType.ERROR);
         alert.setTitle("Invalid Action");
@@ -747,7 +876,6 @@ public class MainController {
         // Record column name for this scenario
         scenarioColumns.computeIfAbsent(key, k -> new ArrayList<>()).add(colName);
     }
-
 
 
     @FXML
@@ -962,7 +1090,6 @@ public class MainController {
             }
         });
     }
-
 
 
 }

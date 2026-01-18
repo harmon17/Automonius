@@ -134,7 +134,6 @@ public class MainController {
         });
 
 
-
         // Setup columns
         tableView.setEditable(true);
         descriptionColumn.setCellValueFactory(new PropertyValueFactory<>("description"));
@@ -143,8 +142,6 @@ public class MainController {
 
         inputColumn.setCellFactory(col -> new AutoCommitTextFieldTableCell<>());
         inputColumn.setOnEditCommit(event -> event.getRowValue().setInput(event.getNewValue()));
-
-
 
 
         objectColumn.setCellValueFactory(new PropertyValueFactory<>("object"));
@@ -310,11 +307,11 @@ public class MainController {
         testExplorerLabel.setContentDisplay(ContentDisplay.LEFT); // icon left of text
 
 
-        // Attach icons to buttons
-        newSuiteBtn.setGraphic(makeIcon("/icons/MainSuite.png", 20, 20));
-        subSuiteBtn.setGraphic(makeIcon("/icons/SubSuite.png", 20, 20));
-        testScenarioBtn.setGraphic(makeIcon("/icons/TestSuite.png", 20, 20));
-        deleteBtn.setGraphic(makeIcon("/icons/delete.png", 20, 20));
+        // Attach icons to buttons later if i still want to persist
+//        newSuiteBtn.setGraphic(makeIcon("/icons/MainSuite.png", 20, 20));
+//        subSuiteBtn.setGraphic(makeIcon("/icons/SubSuite.png", 20, 20));
+//        testScenarioBtn.setGraphic(makeIcon("/icons/TestSuite.png", 20, 20));
+//        deleteBtn.setGraphic(makeIcon("/icons/delete.png", 20, 20));
 
         treeView.setCellFactory(tv -> {
             TreeCell<TestNode> cell = new TreeCell<>() {
@@ -327,7 +324,7 @@ public class MainController {
                         setGraphic(null);
                     } else {
                         setText(item.getName());
-
+//                        setGraphic(null);
                         // Choose icon based on type
                         switch (item.getType()) {
                             case ROOT:
@@ -393,7 +390,7 @@ public class MainController {
                             s.addProperty("description", step.getDescription());
 
                             JsonObject extras = new JsonObject();
-                            step.getExtras().forEach((k,v) -> extras.addProperty(k, v.get()));
+                            step.getExtras().forEach((k, v) -> extras.addProperty(k, v.get()));
                             s.add("extras", extras);
 
                             stepArray.add(s);
@@ -413,7 +410,6 @@ public class MainController {
                     clipboard.setContent(content);
                 }
             });
-
 
 
             MenuItem pasteItem = new MenuItem("Paste");
@@ -605,6 +601,99 @@ public class MainController {
         tableView.getColumns().setAll(itemColumn, objectColumn, actionColumn, descriptionColumn, inputColumn);
         tableView.setFixedCellSize(25);
 
+        // 👉 Enable drag-and-drop row reordering
+        tableView.setRowFactory(tv -> {
+            TableRow<TestStep> row = new TableRow<>();
+
+            row.setOnDragDetected(event -> {
+                if (!row.isEmpty()) {
+                    Dragboard db = row.startDragAndDrop(TransferMode.MOVE);
+                    ClipboardContent cc = new ClipboardContent();
+                    cc.putString(Integer.toString(row.getIndex()));
+                    db.setContent(cc);
+                    event.consume();
+                }
+            });
+
+            row.setOnDragOver(event -> {
+                Dragboard db = event.getDragboard();
+                if (db.hasString()) {
+                    int draggedIndex = Integer.parseInt(db.getString());
+                    if (row.getIndex() != draggedIndex) {
+                        event.acceptTransferModes(TransferMode.MOVE);
+                        row.setStyle("-fx-background-color: lightgreen;");
+                    }
+                }
+                event.consume();
+            });
+
+            row.setOnDragExited(event -> row.setStyle(""));
+
+            row.setOnDragDropped(event -> {
+                Dragboard db = event.getDragboard();
+                if (db.hasString()) {
+                    int draggedIndex = Integer.parseInt(db.getString());
+                    TestStep draggedStep = tableView.getItems().remove(draggedIndex);
+
+                    int dropIndex = row.isEmpty() ? tableView.getItems().size() : row.getIndex();
+                    tableView.getItems().add(dropIndex, draggedStep);
+
+                    tableView.getSelectionModel().select(dropIndex);
+                    event.setDropCompleted(true);
+                }
+                event.consume();
+            });
+
+            return row;
+        });
+
+
+        // 👉 Add TableView context menu here
+        ContextMenu tableMenu = new ContextMenu();
+
+        MenuItem copyRowItem = new MenuItem("Copy Row");
+        copyRowItem.setOnAction(e -> {
+            TestStep selectedStep = tableView.getSelectionModel().getSelectedItem();
+            if (selectedStep != null) {
+                ClipboardContent content = new ClipboardContent();
+                StringBuilder sb = new StringBuilder();
+                sb.append(selectedStep.getItem()).append("|")
+                        .append(selectedStep.getAction()).append("|")
+                        .append(selectedStep.getObject()).append("|")
+                        .append(selectedStep.getInput()).append("|")
+                        .append(selectedStep.getDescription());
+                selectedStep.getExtras().forEach((k, v) -> sb.append("|").append(k).append("=").append(v.get()));
+                content.putString(sb.toString());
+                Clipboard.getSystemClipboard().setContent(content);
+            }
+        });
+
+        MenuItem pasteRowItem = new MenuItem("Paste Row");
+        pasteRowItem.setOnAction(e -> {
+            Clipboard clipboard = Clipboard.getSystemClipboard();
+            if (clipboard.hasString()) {
+                String[] parts = clipboard.getString().split("\\|");
+                if (parts.length >= 5) {
+                    TestStep newStep = new TestStep(parts[0], parts[1], parts[2], parts[3]);
+                    newStep.setDescription(parts[4]);
+                    for (int i = 5; i < parts.length; i++) {
+                        String[] kv = parts[i].split("=", 2);
+                        if (kv.length == 2) newStep.setExtra(kv[0], kv[1]);
+                    }
+                    int index = tableView.getSelectionModel().getSelectedIndex();
+                    if (index >= 0) {
+                        tableView.getItems().add(index + 1, newStep);
+                    } else {
+                        tableView.getItems().add(newStep);
+                    }
+                }
+            }
+        });
+
+        tableMenu.getItems().addAll(copyRowItem, pasteRowItem);
+        tableView.setContextMenu(tableMenu);
+
+
     }
 
     @FXML
@@ -669,7 +758,6 @@ public class MainController {
             showError("TestScenario can only be added inside a Suite or Sub-Suite.");
         }
     }
-
 
 
     @FXML
@@ -754,7 +842,6 @@ public class MainController {
     }
 
 
-
     private void showError(String message) {
         Alert alert = new Alert(Alert.AlertType.ERROR);
         alert.setTitle("Invalid Action");
@@ -836,7 +923,6 @@ public class MainController {
         // Record column name for this scenario
         scenarioColumns.computeIfAbsent(key, k -> new ArrayList<>()).add(colName);
     }
-
 
 
     @FXML
@@ -1050,6 +1136,28 @@ public class MainController {
                 }
             }
         });
+    }
+
+    @FXML
+    private void handleMoveUp(ActionEvent event) {
+        int index = tableView.getSelectionModel().getSelectedIndex();
+        if (index > 0) {
+            ObservableList<TestStep> items = tableView.getItems();
+            TestStep step = items.remove(index);
+            items.add(index - 1, step);
+            tableView.getSelectionModel().select(index - 1);
+        }
+    }
+
+    @FXML
+    private void handleMoveDown(ActionEvent event) {
+        int index = tableView.getSelectionModel().getSelectedIndex();
+        ObservableList<TestStep> items = tableView.getItems();
+        if (index >= 0 && index < items.size() - 1) {
+            TestStep step = items.remove(index);
+            items.add(index + 1, step);
+            tableView.getSelectionModel().select(index + 1);
+        }
     }
 
 
