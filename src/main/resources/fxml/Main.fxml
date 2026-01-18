@@ -17,7 +17,8 @@
     <children>
 
         <!-- Top Menu Bar -->
-        <MenuBar AnchorPane.topAnchor="0.0" AnchorPane.leftAnchor="0.0" AnchorPane.rightAnchor="0.0" styleClass="menu-bar">
+        <MenuBar AnchorPane.topAnchor="0.0" AnchorPane.leftAnchor="0.0" AnchorPane.rightAnchor="0.0"
+                 styleClass="menu-bar">
             <menus>
                 <Menu text="File">
                     <items>
@@ -57,28 +58,36 @@
                 <HBox spacing="6" alignment="CENTER" styleClass="group-b-box">
                     <children>
                         <Button onAction="#handleNewSuite" styleClass="rounded-addrow-btn">
-                            <graphic><FontIcon iconLiteral="mdi-folder-plus" iconSize="16"/></graphic>
+                            <graphic>
+                                <FontIcon iconLiteral="mdi-folder-plus" iconSize="16"/>
+                            </graphic>
                             <tooltip>
                                 <Tooltip text="New Suite"/>
                             </tooltip>
                         </Button>
 
                         <Button onAction="#handleNewSubSuite" styleClass="rounded-addrow-btn">
-                            <graphic><FontIcon iconLiteral="mdi-folder-outline" iconSize="16"/></graphic>
+                            <graphic>
+                                <FontIcon iconLiteral="mdi-folder-outline" iconSize="16"/>
+                            </graphic>
                             <tooltip>
                                 <Tooltip text="New Sub-Suite"/>
                             </tooltip>
                         </Button>
 
                         <Button onAction="#handleNewTestScenario" styleClass="rounded-addrow-btn">
-                            <graphic><FontIcon iconLiteral="mdi-file-outline" iconSize="16"/></graphic>
+                            <graphic>
+                                <FontIcon iconLiteral="mdi-file-outline" iconSize="16"/>
+                            </graphic>
                             <tooltip>
                                 <Tooltip text="New TestScenario"/>
                             </tooltip>
                         </Button>
 
                         <Button onAction="#handleDelete" styleClass="rounded-addrow-btn">
-                            <graphic><FontIcon iconLiteral="mdi-delete" iconSize="16"/></graphic>
+                            <graphic>
+                                <FontIcon iconLiteral="mdi-delete" iconSize="16"/>
+                            </graphic>
                             <tooltip>
                                 <Tooltip text="Delete"/>
                             </tooltip>
@@ -86,7 +95,6 @@
 
                     </children>
                 </HBox>
-
 
 
                 <!-- Suite TreeView -->
@@ -117,7 +125,8 @@
 
         <!-- TableView Panel -->
         <VBox prefWidth="620.0" spacing="10" styleClass="table-box"
-              AnchorPane.topAnchor="40.0" AnchorPane.leftAnchor="260.0" AnchorPane.rightAnchor="320.0" AnchorPane.bottomAnchor="20.0">
+              AnchorPane.topAnchor="40.0" AnchorPane.leftAnchor="260.0" AnchorPane.rightAnchor="320.0"
+              AnchorPane.bottomAnchor="20.0">
             <children>
                 <!-- Table controls -->
                 <HBox alignment="CENTER_RIGHT" spacing="20">
@@ -126,16 +135,24 @@
                         <HBox spacing="8" styleClass="group-a-box">
                             <children>
                                 <Button fx:id="runBtn" onAction="#handleRun" styleClass="rounded-action-btn">
-                                    <graphic><FontIcon iconLiteral="mdi-play-circle-outline" iconSize="18"/></graphic>
+                                    <graphic>
+                                        <FontIcon iconLiteral="mdi-play-circle-outline" iconSize="18"/>
+                                    </graphic>
                                 </Button>
                                 <Button fx:id="saveBtn" onAction="#handleSave" styleClass="rounded-action-btn">
-                                    <graphic><FontIcon iconLiteral="mdi-content-save" iconSize="18"/></graphic>
+                                    <graphic>
+                                        <FontIcon iconLiteral="mdi-content-save" iconSize="18"/>
+                                    </graphic>
                                 </Button>
                                 <Button fx:id="reportBtn" styleClass="rounded-action-btn">
-                                    <graphic><FontIcon iconLiteral="mdi-file-chart" iconSize="18"/></graphic>
+                                    <graphic>
+                                        <FontIcon iconLiteral="mdi-file-chart" iconSize="18"/>
+                                    </graphic>
                                 </Button>
                                 <Button fx:id="tagBtn" styleClass="rounded-action-btn">
-                                    <graphic><FontIcon iconLiteral="mdi-tag" iconSize="18"/></graphic>
+                                    <graphic>
+                                        <FontIcon iconLiteral="mdi-tag" iconSize="18"/>
+                                    </graphic>
                                 </Button>
                             </children>
                         </HBox>
@@ -151,22 +168,35 @@
                         <HBox spacing="8" styleClass="group-b-box">
                             <children>
                                 <Button fx:id="AddRow" onAction="#handleAddRow" styleClass="rounded-addrow-btn">
-                                    <graphic><FontIcon iconLiteral="mdi-plus" iconSize="16"/></graphic>
+                                    <graphic>
+                                        <FontIcon iconLiteral="mdi-plus" iconSize="16"/>
+                                    </graphic>
                                 </Button>
                                 <Button fx:id="DeleteRow" onAction="#handleDeleteRow" styleClass="rounded-addrow-btn">
-                                    <graphic><FontIcon iconLiteral="mdi-minus" iconSize="16"/></graphic>
+                                    <graphic>
+                                        <FontIcon iconLiteral="mdi-minus" iconSize="16"/>
+                                    </graphic>
                                 </Button>
                                 <Button fx:id="AddColumn" onAction="#handleAddColumn" styleClass="rounded-addrow-btn">
-                                    <graphic><FontIcon iconLiteral="mdi-table-column-plus-after" iconSize="16"/></graphic>
+                                    <graphic>
+                                        <FontIcon iconLiteral="mdi-table-column-plus-after" iconSize="16"/>
+                                    </graphic>
                                 </Button>
-                                <Button fx:id="DeleteColumn" onAction="#handleDeleteColumn" styleClass="rounded-addrow-btn">
-                                    <graphic><FontIcon iconLiteral="mdi-table-column-remove" iconSize="16"/></graphic>
+                                <Button fx:id="DeleteColumn" onAction="#handleDeleteColumn"
+                                        styleClass="rounded-addrow-btn">
+                                    <graphic>
+                                        <FontIcon iconLiteral="mdi-table-column-remove" iconSize="16"/>
+                                    </graphic>
                                 </Button>
                                 <Button fx:id="MoveUp" onAction="#handleMoveUp" styleClass="rounded-addrow-btn">
-                                    <graphic><FontIcon iconLiteral="mdi-arrow-up" iconSize="16"/></graphic>
+                                    <graphic>
+                                        <FontIcon iconLiteral="mdi-arrow-up" iconSize="16"/>
+                                    </graphic>
                                 </Button>
                                 <Button fx:id="MoveDown" onAction="#handleMoveDown" styleClass="rounded-addrow-btn">
-                                    <graphic><FontIcon iconLiteral="mdi-arrow-down" iconSize="16"/></graphic>
+                                    <graphic>
+                                        <FontIcon iconLiteral="mdi-arrow-down" iconSize="16"/>
+                                    </graphic>
                                 </Button>
                             </children>
                         </HBox>
@@ -193,12 +223,9 @@
             <children>
                 <SplitPane dividerPositions="0.3" orientation="VERTICAL">
                     <items>
-                        <VBox spacing="6">
-                            <children>
-                                <Label text="Variables / Objects"/>
-                                <TreeView fx:id="variablesTree"/>
-                            </children>
-                        </VBox>
+                        <!-- Variables panel included without fx:id -->
+                        <fx:include source="variable.fxml"/>
+
                         <TabPane>
                             <tabs>
                                 <Tab text="Execution Logs">

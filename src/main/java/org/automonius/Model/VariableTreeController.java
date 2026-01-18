@@ -1,0 +1,168 @@
+package org.automonius.Model;
+
+import javafx.collections.FXCollections;
+import javafx.collections.ObservableList;
+import javafx.fxml.FXML;
+import javafx.scene.control.*;
+import javafx.scene.input.Clipboard;
+import javafx.scene.input.ClipboardContent;
+import javafx.scene.input.Dragboard;
+import javafx.scene.input.TransferMode;
+import org.kordamp.ikonli.javafx.FontIcon;
+
+public class VariableTreeController {
+
+    @FXML
+    private TreeView<Variable> variablesTree;
+
+    public VariableTreeController() {}
+
+    @FXML
+    public void initialize() {
+        initializeTree();
+    }
+
+    private void initializeTree() {
+        variablesTree.setCellFactory(tv -> new TreeCell<>() {
+            @Override
+            protected void updateItem(Variable item, boolean empty) {
+                super.updateItem(item, empty);
+                if (empty || item == null) {
+                    setText(null);
+                    setGraphic(null);
+                    setContextMenu(null);
+                } else {
+                    setText(item.getName());
+                    setGraphic("category".equals(item.getType())
+                            ? new FontIcon("mdi-folder-outline")
+                            : new FontIcon("mdi-tag"));
+
+                    ContextMenu menu = new ContextMenu();
+
+                    MenuItem editItem = new MenuItem("Edit…");
+                    editItem.setOnAction(e -> {
+                        TextInputDialog dialog = new TextInputDialog(item.getValue());
+                        dialog.setTitle("Edit Variable");
+                        dialog.setHeaderText("Edit value for " + item.getName());
+                        dialog.setContentText("Value:");
+                        dialog.showAndWait().ifPresent(newVal -> item.setValue(newVal));
+                    });
+
+                    MenuItem copyItem = new MenuItem("Copy Value");
+                    copyItem.setOnAction(e -> {
+                        ClipboardContent content = new ClipboardContent();
+                        content.putString(item.getValue());
+                        Clipboard.getSystemClipboard().setContent(content);
+                    });
+
+                    MenuItem deleteItem = new MenuItem("Delete");
+                    deleteItem.setOnAction(e -> {
+                        TreeItem<Variable> treeItem = getTreeItem();
+                        if (treeItem != null && treeItem.getParent() != null) {
+                            treeItem.getParent().getChildren().remove(treeItem);
+                        }
+                    });
+
+                    menu.getItems().addAll(editItem, copyItem, deleteItem);
+
+                    if ("category".equals(item.getType())) {
+                        MenuItem addVarItem = new MenuItem("Add Variable…");
+                        addVarItem.setOnAction(e -> {
+                            TextInputDialog dialog = new TextInputDialog();
+                            dialog.setTitle("New Variable");
+                            dialog.setHeaderText("Add variable to " + item.getName());
+                            dialog.setContentText("Variable name:");
+                            dialog.showAndWait().ifPresent(varName -> {
+                                TreeItem<Variable> newVar = new TreeItem<>(
+                                        new Variable(varName, "variable", "defaultValue", "global")
+                                );
+                                getTreeItem().getChildren().add(newVar);
+                            });
+                        });
+                        menu.getItems().add(addVarItem);
+                    }
+
+                    setContextMenu(menu);
+                }
+            }
+        });
+
+        TreeItem<Variable> root = new TreeItem<>(new Variable("Variables / Objects", "root", "", ""));
+        root.setExpanded(true);
+
+        root.getChildren().add(new TreeItem<>(new Variable("Web 🌐", "category", "", "")));
+        root.getChildren().add(new TreeItem<>(new Variable("API 🛠", "category", "", "")));
+        root.getChildren().add(new TreeItem<>(new Variable("Database 🗄", "category", "", "")));
+
+        variablesTree.setRoot(root);
+
+        // Drag support
+        variablesTree.setOnDragDetected(event -> {
+            TreeItem<Variable> selected = variablesTree.getSelectionModel().getSelectedItem();
+            if (selected != null && "variable".equals(selected.getValue().getType())) {
+                Dragboard db = variablesTree.startDragAndDrop(TransferMode.COPY);
+                ClipboardContent content = new ClipboardContent();
+
+                // Put both name and value in dragboard
+                content.putString(selected.getValue().getName() + "::" + selected.getValue().getValue());
+
+                db.setContent(content);
+                event.consume();
+            }
+        });
+
+
+    }
+
+    @FXML
+    private void addCategory() {
+        TextInputDialog dialog = new TextInputDialog();
+        dialog.setTitle("New Category");
+        dialog.setHeaderText("Add new category");
+        dialog.setContentText("Category name:");
+        dialog.showAndWait().ifPresent(catName -> {
+            TreeItem<Variable> newCat = new TreeItem<>(new Variable(catName, "category", "", ""));
+            variablesTree.getRoot().getChildren().add(newCat);
+        });
+    }
+
+    @FXML
+    private void addVariable() {
+        TreeItem<Variable> selected = variablesTree.getSelectionModel().getSelectedItem();
+        if (selected != null && "category".equals(selected.getValue().getType())) {
+            TextInputDialog dialog = new TextInputDialog();
+            dialog.setTitle("New Variable");
+            dialog.setHeaderText("Add variable to " + selected.getValue().getName());
+            dialog.setContentText("Variable name:");
+            dialog.showAndWait().ifPresent(varName -> {
+                TreeItem<Variable> newVar = new TreeItem<>(new Variable(varName, "variable", "defaultValue", "global"));
+                selected.getChildren().add(newVar);
+            });
+        }
+    }
+
+    @FXML
+    private void deleteSelected() {
+        TreeItem<Variable> selected = variablesTree.getSelectionModel().getSelectedItem();
+        if (selected != null && selected.getParent() != null) {
+            selected.getParent().getChildren().remove(selected);
+        }
+    }
+
+    public ObservableList<String> getVariableNames() {
+        ObservableList<String> names = FXCollections.observableArrayList();
+        collectVariableNames(variablesTree.getRoot(), names);
+        return names;
+    }
+
+    private void collectVariableNames(TreeItem<Variable> node, ObservableList<String> names) {
+        if (node == null) return;
+        Variable v = node.getValue();
+        if (v != null && "variable".equals(v.getType())) {
+            names.add(v.getName());
+        }
+        for (TreeItem<Variable> child : node.getChildren()) {
+            collectVariableNames(child, names);
+        }
+    }
+}

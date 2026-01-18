@@ -11,6 +11,7 @@ import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.event.ActionEvent;
 import javafx.fxml.FXML;
+import javafx.fxml.FXMLLoader;
 import javafx.scene.Scene;
 import javafx.scene.canvas.Canvas;
 import javafx.scene.canvas.GraphicsContext;
@@ -23,6 +24,7 @@ import javafx.scene.image.ImageView;
 import javafx.scene.input.*;
 import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
+import javafx.stage.Modality;
 import javafx.stage.Stage;
 import org.apache.poi.ss.usermodel.DataFormatter;
 import org.apache.poi.ss.usermodel.Row;
@@ -31,8 +33,11 @@ import org.apache.poi.ss.usermodel.Workbook;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.automonius.Actions.ActionLibrary;
 import org.automonius.Annotations.ActionMeta;
+import org.automonius.Model.Variable;
+import org.automonius.Model.VariableTreeController;
 import org.automonius.exec.TestCase;
 import org.automonius.exec.TestExecutor;
+import org.kordamp.ikonli.javafx.FontIcon;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -72,53 +77,19 @@ public class MainController {
     @FXML
     private CanvasController canvasPanelController;
     @FXML
-    private TreeView<String> variablesTree;
-
+    private VariableTreeController variableTreeController;
     @FXML
     private StackPane canvasWrapper;
     private final Map<String, List<TestStep>> scenarioSteps = new HashMap<>();
     // Cache of extra column names per scenario
     private final Map<String, List<String>> scenarioColumns = new HashMap<>();
-
-
+    @FXML
     private final DataFormatter formatter = new DataFormatter();
 
 
     @FXML
     public void initialize() {
 
-        TreeItem<String> variablesRoot = new TreeItem<>("Variables");
-
-        // Web group
-        TreeItem<String> webGroup = new TreeItem<>("Web 🌐");
-        TreeItem<String> loginUrl = new TreeItem<>("loginUrl");
-        loginUrl.getChildren().addAll(
-                new TreeItem<>("staging.jp.bank/login"),
-                new TreeItem<>("staging.kr.bank/login")
-        );
-        webGroup.getChildren().add(loginUrl);
-
-        // API group
-        TreeItem<String> apiGroup = new TreeItem<>("API 🔌");
-        TreeItem<String> apiBaseUrl = new TreeItem<>("apiBaseUrl");
-        apiBaseUrl.getChildren().addAll(
-                new TreeItem<>("staging.jp.api.bank"),
-                new TreeItem<>("staging.kr.api.bank")
-        );
-        apiGroup.getChildren().add(apiBaseUrl);
-
-        // DB group
-        TreeItem<String> dbGroup = new TreeItem<>("Database 🗄️");
-        TreeItem<String> dbConnection = new TreeItem<>("dbConnection");
-        dbConnection.getChildren().addAll(
-                new TreeItem<>("jdbc:mysql://staging.jp.bank"),
-                new TreeItem<>("jdbc:mysql://staging.kr.bank")
-        );
-        dbGroup.getChildren().add(dbConnection);
-
-        variablesRoot.getChildren().addAll(webGroup, apiGroup, dbGroup);
-        variablesTree.setRoot(variablesRoot);
-        variablesRoot.setExpanded(true);
 
         // --- Test Explorer TreeView setup ---
         TreeItem<TestNode> explorerRoot = new TreeItem<>(new TestNode("Directory Structure", NodeType.ROOT));
@@ -133,14 +104,16 @@ public class MainController {
         defaultSuite.setExpanded(true);
 
         TreeItem<TestNode> defaultScenario = new TreeItem<>(new TestNode("Test Suite", NodeType.TEST_SCENARIO));
-        defaultSuite.getChildren().add(defaultScenario);
+        defaultSuite.getChildren().
+
+                add(defaultScenario);
 
         String key = makeKey(defaultScenario);
 
         // ✅ Use ObservableList directly
         ObservableList<TestStep> steps = FXCollections.observableArrayList();
 
-// Optionally seed with a sample TestCase
+        // Optionally seed with a sample TestCase
         TestCase sample = TestExecutor.getTestByAction(
                 org.automonius.Actions.ActionLibrary.class,
                 "checkFileReadable"
@@ -156,18 +129,24 @@ public class MainController {
         }
 
         // Add a blank row for user editing
-        steps.add(new TestStep("", "", "", ""));
+        steps.add(new
+
+                TestStep("", "", "", ""));
 
         // Bind to table and scenario map
         tableView.setItems(steps);
         scenarioSteps.put(key, steps);
 
         // Tree setup
-        root.getChildren().add(defaultSuite);
+        root.getChildren().
+
+                add(defaultSuite);
         treeView.setRoot(root);
 
 // ✅ Force initial selection on the TestScenario
-        Platform.runLater(() -> {
+        Platform.runLater(() ->
+
+        {
             treeView.getSelectionModel().select(defaultScenario);
             treeView.getFocusModel().focus(treeView.getRow(defaultScenario));
         });
@@ -177,10 +156,14 @@ public class MainController {
         tableView.setEditable(true);
         descriptionColumn.setCellValueFactory(new PropertyValueFactory<>("description"));
         descriptionColumn.setCellFactory(col -> new AutoCommitTextFieldTableCell<>());
-        descriptionColumn.setOnEditCommit(event -> event.getRowValue().setDescription(event.getNewValue()));
+        descriptionColumn.setOnEditCommit(event -> event.getRowValue().
+
+                setDescription(event.getNewValue()));
 
         inputColumn.setCellFactory(col -> new AutoCommitTextFieldTableCell<>());
-        inputColumn.setOnEditCommit(event -> event.getRowValue().setInput(event.getNewValue()));
+        inputColumn.setOnEditCommit(event -> event.getRowValue().
+
+                setInput(event.getNewValue()));
 
 
         objectColumn.setCellValueFactory(new PropertyValueFactory<>("object"));
@@ -189,7 +172,11 @@ public class MainController {
 
 
         itemColumn.setCellValueFactory(cellData ->
-                new ReadOnlyStringWrapper(String.valueOf(tableView.getItems().indexOf(cellData.getValue()) + 1))
+                new
+
+                        ReadOnlyStringWrapper(String.valueOf(tableView.getItems().
+
+                        indexOf(cellData.getValue()) + 1))
         );
 
         itemColumn.setEditable(false);
@@ -250,7 +237,9 @@ public class MainController {
         });
 
 
-        actionColumn.setOnEditCommit(event -> event.getRowValue().setAction(event.getNewValue()));
+        actionColumn.setOnEditCommit(event -> event.getRowValue().
+
+                setAction(event.getNewValue()));
 
         inputColumn.setCellFactory(col -> new TableCell<TestStep, String>() {
             @Override
@@ -260,6 +249,46 @@ public class MainController {
             }
 
             {
+                // --- Drag & Drop support ---
+                setOnDragOver(event -> {
+                    if (event.getGestureSource() != this && event.getDragboard().hasString()) {
+                        event.acceptTransferModes(TransferMode.COPY);
+                        setStyle("-fx-background-color: lightgreen;"); // highlight when dragging over
+                    }
+                    event.consume();
+                });
+
+                setOnDragExited(event -> {
+                    setStyle(""); // reset style when drag leaves
+                });
+
+                setOnDragDropped(event -> {
+                    Dragboard db = event.getDragboard();
+                    if (db.hasString()) {
+                        String data = db.getString();
+                        String[] parts = data.split("::", 2);
+                        String varName = parts[0];                 // e.g. gdaga3434
+                        String varValue = parts.length > 1 ? parts[1] : ""; // e.g. ThisIsTheValue
+
+                        TestStep step = getTableView().getItems().get(getIndex());
+                        step.setInput(varName);   // ✅ save variable name in model
+                        setText(varName);         // ✅ show variable name in cell
+
+                        // 🔔 Pop-up shows the value
+                        Alert alert = new Alert(Alert.AlertType.INFORMATION);
+                        alert.setTitle("Variable Added");
+                        alert.setHeaderText(null);
+                        alert.setContentText("You added value: " + varValue + " into input.");
+                        alert.initModality(Modality.NONE);
+                        alert.show();
+                    }
+                    event.setDropCompleted(true);
+                    event.consume();
+                });
+
+
+
+                // --- Existing click-to-edit dialog ---
                 setOnMouseClicked(event -> {
                     if (!isEmpty()) {
                         TestStep step = getTableView().getItems().get(getIndex());
@@ -342,7 +371,9 @@ public class MainController {
         });
 
 
-        testExplorerLabel.setGraphic(makeIcon("/icons/explorer.png", 50, 50));
+        testExplorerLabel.setGraphic(
+
+                makeIcon("/icons/explorer.png", 50, 50));
         testExplorerLabel.setContentDisplay(ContentDisplay.LEFT); // icon left of text
 
 
@@ -352,7 +383,9 @@ public class MainController {
 //        testScenarioBtn.setGraphic(makeIcon("/icons/TestSuite.png", 20, 20));
 //        deleteBtn.setGraphic(makeIcon("/icons/delete.png", 20, 20));
 
-        treeView.setCellFactory(tv -> {
+        treeView.setCellFactory(tv ->
+
+        {
             TreeCell<TestNode> cell = new TreeCell<>() {
                 @Override
                 protected void updateItem(TestNode item, boolean empty) {
@@ -605,20 +638,28 @@ public class MainController {
 
 
         // Listener: when TestScenario selected, load its steps
-        treeView.getSelectionModel().selectedItemProperty().addListener((obs, oldVal, newVal) -> {
-            if (oldVal != null && oldVal.getValue().getType() == NodeType.TEST_SCENARIO) {
-                saveTestScenario(oldVal);
-            }
-            if (newVal != null && newVal.getValue().getType() == NodeType.TEST_SCENARIO) {
-                loadTestScenario(newVal);
-            } else {
-                tableView.getItems().clear();
-            }
-        });
+        treeView.getSelectionModel().
+
+                selectedItemProperty().
+
+                addListener((obs, oldVal, newVal) ->
+
+                {
+                    if (oldVal != null && oldVal.getValue().getType() == NodeType.TEST_SCENARIO) {
+                        saveTestScenario(oldVal);
+                    }
+                    if (newVal != null && newVal.getValue().getType() == NodeType.TEST_SCENARIO) {
+                        loadTestScenario(newVal);
+                    } else {
+                        tableView.getItems().clear();
+                    }
+                });
 
 
         // Ctrl+S shortcut
-        Platform.runLater(() -> {
+        Platform.runLater(() ->
+
+        {
             treeView.sceneProperty().addListener((obs, oldScene, newScene) -> {
                 if (newScene != null) {
                     newScene.addEventFilter(KeyEvent.KEY_PRESSED, event -> {
@@ -637,7 +678,9 @@ public class MainController {
 
         });
 
-        tableView.getColumns().setAll(itemColumn, objectColumn, actionColumn, descriptionColumn, inputColumn);
+        tableView.getColumns().
+
+                setAll(itemColumn, objectColumn, actionColumn, descriptionColumn, inputColumn);
         tableView.setFixedCellSize(25);
 
         // 👉 Enable drag-and-drop row reordering
@@ -648,7 +691,7 @@ public class MainController {
                 if (!row.isEmpty()) {
                     Dragboard db = row.startDragAndDrop(TransferMode.MOVE);
                     ClipboardContent cc = new ClipboardContent();
-                    cc.putString(Integer.toString(row.getIndex()));
+                    cc.putString(Integer.toString(row.getIndex())); // index as string
                     db.setContent(cc);
                     event.consume();
                 }
@@ -657,10 +700,13 @@ public class MainController {
             row.setOnDragOver(event -> {
                 Dragboard db = event.getDragboard();
                 if (db.hasString()) {
-                    int draggedIndex = Integer.parseInt(db.getString());
-                    if (row.getIndex() != draggedIndex) {
-                        event.acceptTransferModes(TransferMode.MOVE);
-                        row.setStyle("-fx-background-color: lightgreen;");
+                    String data = db.getString();
+                    if (data.matches("\\d+")) { // ✅ only parse if numeric
+                        int draggedIndex = Integer.parseInt(data);
+                        if (row.getIndex() != draggedIndex) {
+                            event.acceptTransferModes(TransferMode.MOVE);
+                            row.setStyle("-fx-background-color: lightgreen;");
+                        }
                     }
                 }
                 event.consume();
@@ -670,16 +716,29 @@ public class MainController {
 
             row.setOnDragDropped(event -> {
                 Dragboard db = event.getDragboard();
+                boolean success = false;
+
                 if (db.hasString()) {
-                    int draggedIndex = Integer.parseInt(db.getString());
-                    TestStep draggedStep = tableView.getItems().remove(draggedIndex);
+                    String data = db.getString();
 
-                    int dropIndex = row.isEmpty() ? tableView.getItems().size() : row.getIndex();
-                    tableView.getItems().add(dropIndex, draggedStep);
+                    if (data.matches("\\d+")) {
+                        int draggedIndex = Integer.parseInt(data);
+                        if (draggedIndex >= 0 && draggedIndex < tableView.getItems().size()) {
+                            TestStep draggedStep = tableView.getItems().remove(draggedIndex);
 
-                    tableView.getSelectionModel().select(dropIndex);
-                    event.setDropCompleted(true);
+                            int dropIndex = row.isEmpty() ? tableView.getItems().size() : row.getIndex();
+                            if (draggedIndex < dropIndex) {
+                                dropIndex--;
+                            }
+
+                            tableView.getItems().add(dropIndex, draggedStep);
+                            tableView.getSelectionModel().select(dropIndex);
+                            success = true;
+                        }
+                    }
                 }
+
+                event.setDropCompleted(success);
                 event.consume();
             });
 
@@ -687,11 +746,14 @@ public class MainController {
         });
 
 
+
         // 👉 Add TableView context menu here
         ContextMenu tableMenu = new ContextMenu();
 
         MenuItem copyRowItem = new MenuItem("Copy Row");
-        copyRowItem.setOnAction(e -> {
+        copyRowItem.setOnAction(e ->
+
+        {
             TestStep selectedStep = tableView.getSelectionModel().getSelectedItem();
             if (selectedStep != null) {
                 ClipboardContent content = new ClipboardContent();
@@ -708,7 +770,9 @@ public class MainController {
         });
 
         MenuItem pasteRowItem = new MenuItem("Paste Row");
-        pasteRowItem.setOnAction(e -> {
+        pasteRowItem.setOnAction(e ->
+
+        {
             Clipboard clipboard = Clipboard.getSystemClipboard();
             if (clipboard.hasString()) {
                 String[] parts = clipboard.getString().split("\\|");
@@ -729,9 +793,10 @@ public class MainController {
             }
         });
 
-        tableMenu.getItems().addAll(copyRowItem, pasteRowItem);
-        tableView.setContextMenu(tableMenu);
+        tableMenu.getItems().
 
+                addAll(copyRowItem, pasteRowItem);
+        tableView.setContextMenu(tableMenu);
 
     }
 

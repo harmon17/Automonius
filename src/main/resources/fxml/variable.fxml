@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+<?import org.kordamp.ikonli.javafx.FontIcon?>
+
+<VBox xmlns="http://javafx.com/javafx/21"
+      xmlns:fx="http://javafx.com/fxml/1"
+      fx:controller="org.automonius.Model.VariableTreeController"
+      spacing="6">
+
+    <!-- Title -->
+    <Label text="Variables / Objects" styleClass="explorer-label"/>
+
+    <!-- Control buttons (icon-only, orange HBox like Explorer) -->
+    <HBox spacing="6" alignment="CENTER" styleClass="group-b-box">
+        <children>
+            <!-- Add Category -->
+            <Button onAction="#addCategory" styleClass="rounded-addrow-btn">
+                <graphic><FontIcon iconLiteral="mdi-folder-plus" iconSize="16"/></graphic>
+                <tooltip><Tooltip text="Add Category"/></tooltip>
+            </Button>
+
+            <!-- Add Variable -->
+            <Button onAction="#addVariable" styleClass="rounded-addrow-btn">
+                <graphic><FontIcon iconLiteral="mdi-folder-plus" iconSize="16"/></graphic>
+                <tooltip><Tooltip text="Add Variable"/></tooltip>
+            </Button>
+
+            <!-- Delete -->
+            <Button onAction="#deleteSelected" styleClass="rounded-addrow-btn">
+                <graphic><FontIcon iconLiteral="mdi-delete" iconSize="16"/></graphic>
+                <tooltip><Tooltip text="Delete Selected"/></tooltip>
+            </Button>
+        </children>
+    </HBox>
+
+    <!-- Variables TreeView -->
+    <TreeView fx:id="variablesTree"/>
+</VBox>
