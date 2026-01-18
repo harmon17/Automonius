@@ -339,11 +339,21 @@ public class MainController {
                                 setGraphic(makeIcon("/icons/TestSuite.png", 16, 16));
                                 break;
                         }
-
                     }
                     setStyle(""); // reset style
                 }
             };
+
+            // ✅ Context menu with Rename option
+            ContextMenu menu = new ContextMenu();
+            MenuItem renameItem = new MenuItem("Rename");
+            renameItem.setOnAction(e -> {
+                if (cell.getItem() != null) {
+                    handleRenameNode(cell.getTreeItem());
+                }
+            });
+            menu.getItems().add(renameItem);
+            cell.setContextMenu(menu);
 
             // Drag detected
             cell.setOnDragDetected(event -> {
@@ -385,8 +395,24 @@ public class MainController {
                     TreeItem<TestNode> targetItem = cell.getTreeItem();
 
                     if (draggedItem != null && targetItem != null && isValidDrop(draggedItem, targetItem)) {
+                        // Capture old key BEFORE moving
+                        String oldKey = makeKey(draggedItem);
+
+                        // Move the node once
                         draggedItem.getParent().getChildren().remove(draggedItem);
                         targetItem.getChildren().add(draggedItem);
+
+                        // Compute new key AFTER move
+                        String newKey = makeKey(draggedItem);
+
+                        // Move scenario data to new key
+                        if (scenarioSteps.containsKey(oldKey)) {
+                            scenarioSteps.put(newKey, scenarioSteps.remove(oldKey));
+                        }
+                        if (scenarioColumns.containsKey(oldKey)) {
+                            scenarioColumns.put(newKey, scenarioColumns.remove(oldKey));
+                        }
+
                         success = true;
                     } else {
                         showError("Invalid drop target for " +
@@ -399,6 +425,7 @@ public class MainController {
 
             return cell;
         });
+
 
         // Listener: when TestScenario selected, load its steps
         treeView.getSelectionModel().selectedItemProperty().addListener((obs, oldVal, newVal) -> {
@@ -542,11 +569,13 @@ public class MainController {
     }
 
     private void loadTestScenario(TreeItem<TestNode> scenario) {
+        // Reset to default columns
         tableView.getColumns().setAll(itemColumn, objectColumn, actionColumn, descriptionColumn, inputColumn);
 
         String key = makeKey(scenario);
         List<TestStep> steps = scenarioSteps.getOrDefault(key, new ArrayList<>());
 
+        // Clone steps so edits don’t mutate the original list directly
         ObservableList<TestStep> clonedSteps = FXCollections.observableArrayList();
         for (TestStep step : steps) {
             TestStep clone = new TestStep(step.getItem(), step.getAction(), step.getObject(), step.getInput());
@@ -559,6 +588,16 @@ public class MainController {
 
         tableView.setItems(clonedSteps);
 
+        // ✅ Re‑apply auto‑commit factories for description
+        descriptionColumn.setCellValueFactory(new PropertyValueFactory<>("description"));
+        descriptionColumn.setCellFactory(col -> new AutoCommitTextFieldTableCell<>());
+        descriptionColumn.setOnEditCommit(event -> event.getRowValue().setDescription(event.getNewValue()));
+
+        // ✅ Keep your custom dialog editor for inputColumn
+        inputColumn.setCellValueFactory(new PropertyValueFactory<>("input"));
+        // Do NOT overwrite inputColumn’s cellFactory here — it was already set up in initialize()
+
+        // ✅ Re‑apply auto‑commit factories for extras
         List<String> extras = scenarioColumns.getOrDefault(key, List.of());
         for (String colName : extras) {
             TableColumn<TestStep, String> extraColumn = new TableColumn<>(colName);
@@ -568,6 +607,7 @@ public class MainController {
             tableView.getColumns().add(extraColumn);
         }
     }
+
 
 
     private void showError(String message) {
@@ -638,11 +678,20 @@ public class MainController {
         extraColumn.setCellFactory(col -> new AutoCommitTextFieldTableCell<>());
         extraColumn.setOnEditCommit(evt -> evt.getRowValue().setExtra(colName, evt.getNewValue()));
 
+        // ✅ Add context menu for renaming
+        MenuItem renameCol = new MenuItem("Rename…");
+        renameCol.setOnAction(e -> {
+            TreeItem<TestNode> scenario = treeView.getSelectionModel().getSelectedItem();
+            handleRenameColumn(extraColumn, scenario);
+        });
+        extraColumn.setContextMenu(new ContextMenu(renameCol));
+
         tableView.getColumns().add(extraColumn);
 
-        // ✅ record column name for this scenario
+        // Record column name for this scenario
         scenarioColumns.computeIfAbsent(key, k -> new ArrayList<>()).add(colName);
     }
+
 
 
     @FXML
@@ -806,6 +855,56 @@ public class MainController {
             }
         }
         return null;
+    }
+
+    private void handleRenameNode(TreeItem<TestNode> node) {
+        TextInputDialog dialog = new TextInputDialog(node.getValue().getName());
+        dialog.setTitle("Rename");
+        dialog.setHeaderText("Rename " + node.getValue().getType());
+        dialog.setContentText("Enter new name:");
+
+        dialog.showAndWait().ifPresent(newName -> {
+            if (!newName.trim().isEmpty()) {
+                node.getValue().setName(newName.trim());
+                treeView.refresh();
+
+                // ✅ If it's a TestScenario, update keys in scenarioSteps/scenarioColumns
+                if (node.getValue().getType() == NodeType.TEST_SCENARIO) {
+                    String oldKey = makeKey(node);
+                    String newKey = makeKey(node);
+                    if (scenarioSteps.containsKey(oldKey)) {
+                        scenarioSteps.put(newKey, scenarioSteps.remove(oldKey));
+                    }
+                    if (scenarioColumns.containsKey(oldKey)) {
+                        scenarioColumns.put(newKey, scenarioColumns.remove(oldKey));
+                    }
+                }
+            }
+        });
+    }
+
+    private void handleRenameColumn(TableColumn<TestStep, String> column, TreeItem<TestNode> scenario) {
+        TextInputDialog dialog = new TextInputDialog(column.getText());
+        dialog.setTitle("Rename Column");
+        dialog.setHeaderText(null);
+        dialog.setContentText("Enter new name:");
+
+        dialog.showAndWait().ifPresent(newName -> {
+            if (!newName.trim().isEmpty()) {
+                String oldName = column.getText();
+                column.setText(newName.trim());
+
+                String key = makeKey(scenario);
+                List<String> cols = scenarioColumns.getOrDefault(key, new ArrayList<>());
+                int idx = cols.indexOf(oldName);
+                if (idx >= 0) cols.set(idx, newName.trim());
+
+                for (TestStep step : tableView.getItems()) {
+                    String value = step.getExtra(oldName);
+                    step.setExtra(newName.trim(), value);
+                }
+            }
+        });
     }
 
 

@@ -344,16 +344,54 @@ public class MainController {
                 }
             };
 
-            // ✅ Context menu with Rename option
+            // ✅ Context menu with Rename, Copy, Paste
             ContextMenu menu = new ContextMenu();
-            MenuItem renameItem = new MenuItem("Rename");
+
+            MenuItem renameItem = new MenuItem("Rename…");
             renameItem.setOnAction(e -> {
                 if (cell.getItem() != null) {
                     handleRenameNode(cell.getTreeItem());
                 }
             });
-            menu.getItems().add(renameItem);
+
+            MenuItem copyItem = new MenuItem("Copy");
+            copyItem.setOnAction(e -> {
+                if (cell.getItem() != null) {
+                    ClipboardContent content = new ClipboardContent();
+                    content.putString(cell.getItem().getName());
+                    Clipboard clipboard = Clipboard.getSystemClipboard();
+                    clipboard.setContent(content);
+                }
+            });
+
+            MenuItem pasteItem = new MenuItem("Paste");
+            pasteItem.setOnAction(e -> {
+                Clipboard clipboard = Clipboard.getSystemClipboard();
+                if (clipboard.hasString()) {
+                    String pastedName = clipboard.getString();
+                    TreeItem<TestNode> target = cell.getTreeItem();
+
+                    if (target != null) {
+                        NodeType tType = target.getValue().getType();
+
+                        // ✅ Only allow TestScenario under Suite or SubSuite
+                        if (tType == NodeType.SUITE || tType == NodeType.SUB_SUITE) {
+                            TreeItem<TestNode> newNode = new TreeItem<>(new TestNode(pastedName, NodeType.TEST_SCENARIO));
+                            target.getChildren().add(newNode);
+
+                            // ✅ Seed with one blank row, no conflict
+                            scenarioSteps.put(makeKey(newNode), new ArrayList<>(List.of(new TestStep("", "", "", ""))));
+                            scenarioColumns.put(makeKey(newNode), new ArrayList<>());
+                        } else {
+                            showError("TestScenario can only be pasted inside a Suite or Sub-Suite.");
+                        }
+                    }
+                }
+            });
+
+            menu.getItems().addAll(renameItem, copyItem, pasteItem);
             cell.setContextMenu(menu);
+
 
             // Drag detected
             cell.setOnDragDetected(event -> {
@@ -485,7 +523,7 @@ public class MainController {
             subSuite.setExpanded(true);
             selected.getChildren().add(subSuite);
         } else {
-            System.out.println("Sub-Suite can only be added inside a Suite.");
+            showError("Sub-Suite can only be added inside a Suite.");
         }
     }
 
