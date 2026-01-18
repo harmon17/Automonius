@@ -61,6 +61,14 @@
     </dependencies>
 
     <build>
+        <resources>
+            <resource>
+                <directory>src/main/resources</directory>
+                <excludes> <!-- Ignore Excel lock/temp files -->
+                    <exclude>**/~$*.xlsx</exclude>
+                </excludes>
+            </resource>
+        </resources>
         <plugins>
             <!-- Compiler plugin -->
             <plugin>

@@ -434,6 +434,7 @@ public class MainController {
         });
 
         tableView.getColumns().setAll(itemColumn, objectColumn, actionColumn, descriptionColumn, inputColumn);
+        tableView.setFixedCellSize(25);
 
     }
 
@@ -654,12 +655,6 @@ public class MainController {
         } else {
             showError("Default columns cannot be deleted.");
         }
-    }
-
-    private String getCellString(Row row, int index) {
-        if (row == null) return "";
-        var cell = row.getCell(index);
-        return (cell == null) ? "" : formatter.formatCellValue(cell);
     }
 
     private Map<String, Integer> buildColumnMap(Row header) {

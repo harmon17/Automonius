@@ -385,8 +385,24 @@ public class MainController {
                     TreeItem<TestNode> targetItem = cell.getTreeItem();
 
                     if (draggedItem != null && targetItem != null && isValidDrop(draggedItem, targetItem)) {
+                        // Capture old key BEFORE moving
+                        String oldKey = makeKey(draggedItem);
+
+                        // Move the node once
                         draggedItem.getParent().getChildren().remove(draggedItem);
                         targetItem.getChildren().add(draggedItem);
+
+                        // Compute new key AFTER move
+                        String newKey = makeKey(draggedItem);
+
+                        // Move scenario data to new key
+                        if (scenarioSteps.containsKey(oldKey)) {
+                            scenarioSteps.put(newKey, scenarioSteps.remove(oldKey));
+                        }
+                        if (scenarioColumns.containsKey(oldKey)) {
+                            scenarioColumns.put(newKey, scenarioColumns.remove(oldKey));
+                        }
+
                         success = true;
                     } else {
                         showError("Invalid drop target for " +
@@ -396,6 +412,7 @@ public class MainController {
                 event.setDropCompleted(success);
                 event.consume();
             });
+
 
             return cell;
         });
@@ -655,12 +672,6 @@ public class MainController {
         } else {
             showError("Default columns cannot be deleted.");
         }
-    }
-
-    private String getCellString(Row row, int index) {
-        if (row == null) return "";
-        var cell = row.getCell(index);
-        return (cell == null) ? "" : formatter.formatCellValue(cell);
     }
 
     private Map<String, Integer> buildColumnMap(Row header) {
