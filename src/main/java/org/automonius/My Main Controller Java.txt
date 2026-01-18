@@ -344,16 +344,69 @@ public class MainController {
                 }
             };
 
-            // ✅ Context menu with Rename option
+            // ✅ Double‑click to rename
+            cell.setOnMouseClicked(event -> {
+                if (event.getClickCount() == 2 && !cell.isEmpty()) {
+                    handleRenameNode(cell.getTreeItem());
+                }
+            });
+
+
+            // ✅ Context menu with Rename, Copy, Paste (preserving node type)
             ContextMenu menu = new ContextMenu();
-            MenuItem renameItem = new MenuItem("Rename");
+
+            MenuItem renameItem = new MenuItem("Rename…");
             renameItem.setOnAction(e -> {
                 if (cell.getItem() != null) {
                     handleRenameNode(cell.getTreeItem());
                 }
             });
-            menu.getItems().add(renameItem);
+
+            MenuItem copyItem = new MenuItem("Copy");
+            copyItem.setOnAction(e -> {
+                if (cell.getItem() != null) {
+                    NodeType type = cell.getItem().getType();
+                    String name = cell.getItem().getName();
+                    ClipboardContent content = new ClipboardContent();
+                    content.putString(type + "::" + name); // e.g., SUB_SUITE::Sub-Suite 1
+                    Clipboard clipboard = Clipboard.getSystemClipboard();
+                    clipboard.setContent(content);
+                }
+            });
+
+            MenuItem pasteItem = new MenuItem("Paste");
+            pasteItem.setOnAction(e -> {
+                Clipboard clipboard = Clipboard.getSystemClipboard();
+                if (clipboard.hasString()) {
+                    String[] parts = clipboard.getString().split("::", 2);
+                    if (parts.length == 2) {
+                        NodeType copiedType = NodeType.valueOf(parts[0]);
+                        String pastedName = parts[1];
+                        TreeItem<TestNode> target = cell.getTreeItem();
+
+                        if (target != null) {
+                            // ✅ Validate hierarchy using your existing rules
+                            if (isValidDrop(new TreeItem<>(new TestNode(pastedName, copiedType)), target)) {
+                                TreeItem<TestNode> newNode = new TreeItem<>(new TestNode(pastedName, copiedType));
+                                target.getChildren().add(newNode);
+
+                                // ✅ Only seed TableView data if it's a TestScenario
+                                if (copiedType == NodeType.TEST_SCENARIO) {
+                                    scenarioSteps.put(makeKey(newNode), new ArrayList<>(List.of(new TestStep("", "", "", ""))));
+                                    scenarioColumns.put(makeKey(newNode), new ArrayList<>());
+                                }
+                            } else {
+                                showError(copiedType + " can only be pasted inside a valid parent.");
+                            }
+                        }
+                    }
+                }
+            });
+
+            menu.getItems().addAll(renameItem, copyItem, pasteItem);
             cell.setContextMenu(menu);
+
+
 
             // Drag detected
             cell.setOnDragDetected(event -> {
@@ -469,8 +522,8 @@ public class MainController {
     private void handleNewSuite(ActionEvent event) {
         TreeItem<TestNode> root = treeView.getRoot();
         if (root != null) {
-            int suiteCount = root.getChildren().size() + 1;
-            TreeItem<TestNode> newSuite = new TreeItem<>(new TestNode("Suite " + suiteCount, NodeType.SUITE));
+            // ✅ Removed numbering sequence, default name is just "Suite"
+            TreeItem<TestNode> newSuite = new TreeItem<>(new TestNode("Suite", NodeType.SUITE));
             newSuite.setExpanded(true);
             root.getChildren().add(newSuite);
         }
@@ -480,14 +533,15 @@ public class MainController {
     private void handleNewSubSuite(ActionEvent event) {
         TreeItem<TestNode> selected = treeView.getSelectionModel().getSelectedItem();
         if (selected != null && selected.getValue().getType() == NodeType.SUITE) {
-            int subSuiteCount = selected.getChildren().size() + 1;
-            TreeItem<TestNode> subSuite = new TreeItem<>(new TestNode("Sub-Suite " + subSuiteCount, NodeType.SUB_SUITE));
+            // ✅ Removed numbering sequence, default name is just "Sub-Suite"
+            TreeItem<TestNode> subSuite = new TreeItem<>(new TestNode("Sub-Suite", NodeType.SUB_SUITE));
             subSuite.setExpanded(true);
             selected.getChildren().add(subSuite);
         } else {
-            System.out.println("Sub-Suite can only be added inside a Suite.");
+            showError("Sub-Suite can only be added inside a Suite.");
         }
     }
+
 
     @FXML
     private void handleNewTestScenario(ActionEvent event) {
@@ -495,6 +549,7 @@ public class MainController {
         if (selected != null &&
                 (selected.getValue().getType() == NodeType.SUITE || selected.getValue().getType() == NodeType.SUB_SUITE)) {
 
+            // ✅ Default name is just "TestSuite" (no numbering)
             TextInputDialog dialog = new TextInputDialog("TestSuite");
             dialog.setTitle("New TestSuite");
             dialog.setHeaderText("Create a new TestSuite");
@@ -513,7 +568,7 @@ public class MainController {
                     steps.add(new TestStep("", "", "", ""));
                     scenarioSteps.put(key, steps);
 
-                    // If this new scenario is selected immediately, show it
+                    // ✅ If this new scenario is selected immediately, show it
                     if (treeView.getSelectionModel().getSelectedItem() == testScenario) {
                         tableView.setItems(FXCollections.observableArrayList(steps));
                     }
@@ -525,6 +580,7 @@ public class MainController {
             showError("TestScenario can only be added inside a Suite or Sub-Suite.");
         }
     }
+
 
 
     @FXML

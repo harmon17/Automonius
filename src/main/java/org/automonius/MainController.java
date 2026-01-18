@@ -1,5 +1,9 @@
 package org.automonius;
 
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import javafx.application.Platform;
 import javafx.beans.property.ReadOnlyStringWrapper;
 import javafx.beans.property.SimpleStringProperty;
@@ -344,7 +348,15 @@ public class MainController {
                 }
             };
 
-            // ✅ Context menu with Rename, Copy, Paste
+            // ✅ Double‑click to rename
+            cell.setOnMouseClicked(event -> {
+                if (event.getClickCount() == 2 && !cell.isEmpty()) {
+                    handleRenameNode(cell.getTreeItem());
+                }
+            });
+
+
+            // ✅ Context menu with Rename, Copy, Paste (preserving node type)
             ContextMenu menu = new ContextMenu();
 
             MenuItem renameItem = new MenuItem("Rename…");
@@ -357,41 +369,133 @@ public class MainController {
             MenuItem copyItem = new MenuItem("Copy");
             copyItem.setOnAction(e -> {
                 if (cell.getItem() != null) {
+                    NodeType type = cell.getItem().getType();
+                    String name = cell.getItem().getName();
+
                     ClipboardContent content = new ClipboardContent();
-                    content.putString(cell.getItem().getName());
+
+                    if (type == NodeType.TEST_SCENARIO) {
+                        String scenarioKey = makeKey(cell.getTreeItem());
+                        List<TestStep> scenarioData = scenarioSteps.getOrDefault(scenarioKey, List.of());
+                        List<String> columns = scenarioColumns.getOrDefault(scenarioKey, List.of());
+
+                        JsonObject json = new JsonObject();
+                        json.addProperty("type", type.name());
+                        json.addProperty("name", name);
+
+                        JsonArray stepArray = new JsonArray();
+                        for (TestStep step : scenarioData) {
+                            JsonObject s = new JsonObject();
+                            s.addProperty("item", step.getItem());
+                            s.addProperty("action", step.getAction());
+                            s.addProperty("object", step.getObject());
+                            s.addProperty("input", step.getInput());
+                            s.addProperty("description", step.getDescription());
+
+                            JsonObject extras = new JsonObject();
+                            step.getExtras().forEach((k,v) -> extras.addProperty(k, v.get()));
+                            s.add("extras", extras);
+
+                            stepArray.add(s);
+                        }
+                        json.add("steps", stepArray);
+
+                        JsonArray colArray = new JsonArray();
+                        columns.forEach(colArray::add);
+                        json.add("columns", colArray);
+
+                        content.putString(json.toString());
+                    } else {
+                        content.putString(type + "::" + name);
+                    }
+
                     Clipboard clipboard = Clipboard.getSystemClipboard();
                     clipboard.setContent(content);
                 }
             });
 
+
+
             MenuItem pasteItem = new MenuItem("Paste");
             pasteItem.setOnAction(e -> {
                 Clipboard clipboard = Clipboard.getSystemClipboard();
                 if (clipboard.hasString()) {
-                    String pastedName = clipboard.getString();
+                    String data = clipboard.getString();
                     TreeItem<TestNode> target = cell.getTreeItem();
 
                     if (target != null) {
-                        NodeType tType = target.getValue().getType();
+                        try {
+                            // Try JSON payload (TestScenario copy)
+                            JsonObject json = JsonParser.parseString(data).getAsJsonObject();
+                            NodeType copiedType = NodeType.valueOf(json.get("type").getAsString());
+                            String pastedName = json.get("name").getAsString();
 
-                        // ✅ Only allow TestScenario under Suite or SubSuite
-                        if (tType == NodeType.SUITE || tType == NodeType.SUB_SUITE) {
-                            TreeItem<TestNode> newNode = new TreeItem<>(new TestNode(pastedName, NodeType.TEST_SCENARIO));
-                            target.getChildren().add(newNode);
+                            if (isValidDrop(new TreeItem<>(new TestNode(pastedName, copiedType)), target)) {
+                                TreeItem<TestNode> newNode = new TreeItem<>(new TestNode(pastedName, copiedType));
+                                target.getChildren().add(newNode);
 
-                            // ✅ Seed with one blank row, no conflict
-                            scenarioSteps.put(makeKey(newNode), new ArrayList<>(List.of(new TestStep("", "", "", ""))));
-                            scenarioColumns.put(makeKey(newNode), new ArrayList<>());
-                        } else {
-                            showError("TestScenario can only be pasted inside a Suite or Sub-Suite.");
+                                if (copiedType == NodeType.TEST_SCENARIO) {
+                                    String scenarioKey = makeKey(newNode);
+
+                                    // Rebuild steps
+                                    List<TestStep> rebuiltSteps = new ArrayList<>();
+                                    for (JsonElement el : json.getAsJsonArray("steps")) {
+                                        JsonObject s = el.getAsJsonObject();
+                                        TestStep step = new TestStep(
+                                                s.get("item").getAsString(),
+                                                s.get("action").getAsString(),
+                                                s.get("object").getAsString(),
+                                                s.get("input").getAsString()
+                                        );
+                                        step.setDescription(s.get("description").getAsString());
+
+                                        JsonObject extras = s.getAsJsonObject("extras");
+                                        for (String k : extras.keySet()) {
+                                            step.setExtra(k, extras.get(k).getAsString());
+                                        }
+                                        rebuiltSteps.add(step);
+                                    }
+                                    scenarioSteps.put(scenarioKey, rebuiltSteps);
+
+                                    // Rebuild columns
+                                    List<String> rebuiltColumns = new ArrayList<>();
+                                    for (JsonElement col : json.getAsJsonArray("columns")) {
+                                        rebuiltColumns.add(col.getAsString());
+                                    }
+                                    scenarioColumns.put(scenarioKey, rebuiltColumns);
+                                }
+                            } else {
+                                showError(copiedType + " can only be pasted inside a valid parent.");
+                            }
+
+                        } catch (Exception ex) {
+                            // Fallback: simple type::name string
+                            String[] parts = data.split("::", 2);
+                            if (parts.length == 2) {
+                                NodeType copiedType = NodeType.valueOf(parts[0]);
+                                String pastedName = parts[1];
+
+                                if (isValidDrop(new TreeItem<>(new TestNode(pastedName, copiedType)), target)) {
+                                    TreeItem<TestNode> newNode = new TreeItem<>(new TestNode(pastedName, copiedType));
+                                    target.getChildren().add(newNode);
+
+                                    if (copiedType == NodeType.TEST_SCENARIO) {
+                                        scenarioSteps.put(makeKey(newNode),
+                                                new ArrayList<>(List.of(new TestStep("", "", "", ""))));
+                                        scenarioColumns.put(makeKey(newNode), new ArrayList<>());
+                                    }
+                                } else {
+                                    showError(copiedType + " can only be pasted inside a valid parent.");
+                                }
+                            }
                         }
                     }
                 }
             });
 
+
             menu.getItems().addAll(renameItem, copyItem, pasteItem);
             cell.setContextMenu(menu);
-
 
             // Drag detected
             cell.setOnDragDetected(event -> {
@@ -507,8 +611,8 @@ public class MainController {
     private void handleNewSuite(ActionEvent event) {
         TreeItem<TestNode> root = treeView.getRoot();
         if (root != null) {
-            int suiteCount = root.getChildren().size() + 1;
-            TreeItem<TestNode> newSuite = new TreeItem<>(new TestNode("Suite " + suiteCount, NodeType.SUITE));
+            // ✅ Removed numbering sequence, default name is just "Suite"
+            TreeItem<TestNode> newSuite = new TreeItem<>(new TestNode("Suite", NodeType.SUITE));
             newSuite.setExpanded(true);
             root.getChildren().add(newSuite);
         }
@@ -518,8 +622,8 @@ public class MainController {
     private void handleNewSubSuite(ActionEvent event) {
         TreeItem<TestNode> selected = treeView.getSelectionModel().getSelectedItem();
         if (selected != null && selected.getValue().getType() == NodeType.SUITE) {
-            long subSuiteCount = selected.getChildren().stream() .filter(child -> child.getValue().getType() == NodeType.SUB_SUITE) .count() + 1;
-            TreeItem<TestNode> subSuite = new TreeItem<>(new TestNode("Sub-Suite " + subSuiteCount, NodeType.SUB_SUITE));
+            // ✅ Removed numbering sequence, default name is just "Sub-Suite"
+            TreeItem<TestNode> subSuite = new TreeItem<>(new TestNode("Sub-Suite", NodeType.SUB_SUITE));
             subSuite.setExpanded(true);
             selected.getChildren().add(subSuite);
         } else {
@@ -527,12 +631,14 @@ public class MainController {
         }
     }
 
+
     @FXML
     private void handleNewTestScenario(ActionEvent event) {
         TreeItem<TestNode> selected = treeView.getSelectionModel().getSelectedItem();
         if (selected != null &&
                 (selected.getValue().getType() == NodeType.SUITE || selected.getValue().getType() == NodeType.SUB_SUITE)) {
 
+            // ✅ Default name is just "TestSuite" (no numbering)
             TextInputDialog dialog = new TextInputDialog("TestSuite");
             dialog.setTitle("New TestSuite");
             dialog.setHeaderText("Create a new TestSuite");
@@ -551,7 +657,7 @@ public class MainController {
                     steps.add(new TestStep("", "", "", ""));
                     scenarioSteps.put(key, steps);
 
-                    // If this new scenario is selected immediately, show it
+                    // ✅ If this new scenario is selected immediately, show it
                     if (treeView.getSelectionModel().getSelectedItem() == testScenario) {
                         tableView.setItems(FXCollections.observableArrayList(steps));
                     }
@@ -563,6 +669,7 @@ public class MainController {
             showError("TestScenario can only be added inside a Suite or Sub-Suite.");
         }
     }
+
 
 
     @FXML
