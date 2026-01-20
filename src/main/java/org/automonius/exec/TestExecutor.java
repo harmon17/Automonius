@@ -2,6 +2,7 @@ package org.automonius.exec;
 
 import org.automonius.Actions.ActionLibrary;
 import org.automonius.Annotations.ActionMeta;
+import org.automonius.TestStep;
 
 import java.lang.reflect.Method;
 import java.util.*;
@@ -54,26 +55,72 @@ public class TestExecutor {
         return actionsByObject;
     }
 
-    public static Object runTest(TestCase testCase) {
+    public static Object runTest(TestStep step) {
         try {
             for (Method method : ActionLibrary.class.getDeclaredMethods()) {
-                if (method.isAnnotationPresent(ActionMeta.class)) {
-                    if (method.getName().equals(testCase.getActionName())) {
-                        // Split the input string into arguments
-                        String[] args = testCase.getInput().split(",");
-                        // Trim whitespace
-                        for (int i = 0; i < args.length; i++) {
-                            args[i] = args[i].trim();
-                        }
-                        // Invoke with arguments
-                        return method.invoke(null, (Object[]) args);
+                if (method.isAnnotationPresent(ActionMeta.class) && method.getName().equals(step.getAction())) {
+                    ActionMeta meta = method.getAnnotation(ActionMeta.class);
+                    int paramCount = method.getParameterCount();
+
+                    // Collect arguments using annotation-driven names
+                    List<String> args = new ArrayList<>();
+                    String[] inputNames = meta.inputs();
+                    for (int i = 0; i < paramCount; i++) {
+                        String name = (i < inputNames.length ? inputNames[i] : "arg" + (i + 1));
+                        args.add(step.getExtra(name));
                     }
+
+                    // Validate argument count
+                    if (args.size() != paramCount) {
+                        throw new IllegalArgumentException("Expected " + paramCount +
+                                " args, got " + args.size());
+                    }
+
+                    // Convert String args to match parameter types
+                    Class<?>[] paramTypes = method.getParameterTypes();
+                    Object[] convertedArgs = new Object[paramCount];
+                    for (int i = 0; i < paramCount; i++) {
+                        String raw = args.get(i);
+                        Class<?> targetType = paramTypes[i];
+
+                        if (targetType == int.class || targetType == Integer.class) {
+                            convertedArgs[i] = (raw == null || raw.isEmpty()) ? 0 : Integer.parseInt(raw);
+                        } else if (targetType == boolean.class || targetType == Boolean.class) {
+                            convertedArgs[i] = (raw != null && Boolean.parseBoolean(raw));
+                        } else {
+                            convertedArgs[i] = raw; // default: keep as String
+                        }
+                    }
+
+                    // Invoke the method
+                    Object result = method.invoke(null, convertedArgs);
+
+                    // ✅ Clean, consistent logging
+                    System.out.println("=== Test Execution ===");
+                    System.out.println("Action: " + step.getAction());
+                    System.out.println("Object: " + step.getObject());
+                    System.out.println("Description: " + step.getDescription());
+
+                    for (int i = 0; i < paramCount; i++) {
+                        String name = (i < inputNames.length ? inputNames[i] : "arg" + (i + 1));
+                        String value = args.get(i) == null ? "" : args.get(i);
+                        System.out.println("Args: " + name + "=" + value);
+                    }
+
+                    System.out.println("Result: " + result);
+                    System.out.println("======================");
+
+                    return result;
                 }
             }
         } catch (Exception e) {
+            System.err.println("Error running action: " + step.getAction());
             e.printStackTrace();
         }
         return null;
     }
+
+
+
 
 }

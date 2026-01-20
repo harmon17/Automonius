@@ -1,22 +1,17 @@
 package org.automonius;
 
 import javafx.beans.property.SimpleStringProperty;
-import org.automonius.exec.TestCase;   // ✅ import TestCase
-import java.util.*;
+import java.util.HashMap;
+import java.util.Map;
 
-/**
- * Represents a single test step row in the TableView.
- * - input: stores the variable name reference (e.g. gdsfs335f).
- * - extras: stores dynamic argument values (Arg1, Arg2, ...).
- */
 public class TestStep {
     private final SimpleStringProperty item;
     private final SimpleStringProperty action;
     private final SimpleStringProperty object;
-    private final SimpleStringProperty input;        // variable name reference
+    private final SimpleStringProperty input;
     private final SimpleStringProperty description;
 
-    // Dynamic extras (argument columns and other metadata)
+    // Unlimited extras stored by column name
     private final Map<String, SimpleStringProperty> extras = new HashMap<>();
 
     // Default constructor for blank rows
@@ -32,17 +27,11 @@ public class TestStep {
         this.description = new SimpleStringProperty("");
     }
 
-    // ✅ New convenience constructor for TestCase
-    public TestStep(TestCase tc) {
-        this("", tc.getActionName(), tc.getObjectName(), tc.getInput());
-        this.setDescription(tc.getDescription());
-    }
-
     // --- Getters ---
     public String getItem() { return item.get(); }
     public String getAction() { return action.get(); }
     public String getObject() { return object.get(); }
-    public String getInput() { return input.get(); }          // variable name
+    public String getInput() { return input.get(); }
     public String getDescription() { return description.get(); }
 
     // --- Setters ---
@@ -59,7 +48,7 @@ public class TestStep {
     public SimpleStringProperty inputProperty() { return input; }
     public SimpleStringProperty descriptionProperty() { return description; }
 
-    // --- Dynamic extras (arguments and more) ---
+    // --- Dynamic extras ---
     public SimpleStringProperty getExtraProperty(String columnName) {
         return extras.computeIfAbsent(columnName, k -> new SimpleStringProperty(""));
     }
@@ -72,34 +61,16 @@ public class TestStep {
         getExtraProperty(columnName).set(value);
     }
 
+    // Optional: expose all extras for cloning/export
     public Map<String, SimpleStringProperty> getExtras() {
         return extras;
     }
 
+    // ✅ Optional setter to replace the entire extras map
     public void setExtras(Map<String, String> newExtras) {
         extras.clear();
         if (newExtras != null) {
             newExtras.forEach((k, v) -> extras.put(k, new SimpleStringProperty(v)));
         }
     }
-
-// Spread a pipe-separated string into annotation-driven extras
-    public void setJoinedArguments(String joined, String[] inputNames) {
-        if (joined == null || joined.isEmpty() || inputNames == null) return;
-        String[] parts = joined.split("\\|");
-        for (int i = 0; i < inputNames.length && i < parts.length; i++) {
-            setExtra(inputNames[i], parts[i].trim());
-        }
-    }
-
-    // Collect annotation-driven extras back into a pipe-separated string
-    public String getJoinedArguments(String[] inputNames) {
-        if (inputNames == null) return "";
-        List<String> values = new ArrayList<>();
-        for (String name : inputNames) {
-            values.add(getExtra(name));
-        }
-        return String.join("|", values);
-    }
-
 }

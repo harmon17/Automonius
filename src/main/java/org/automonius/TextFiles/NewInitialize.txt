@@ -13,6 +13,8 @@ import javafx.event.ActionEvent;
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.Scene;
+import javafx.scene.canvas.Canvas;
+import javafx.scene.canvas.GraphicsContext;
 import javafx.scene.control.*;
 import javafx.scene.control.cell.ComboBoxTableCell;
 import javafx.scene.control.cell.PropertyValueFactory;
@@ -72,17 +74,33 @@ public class MainController {
     private Label testExplorerLabel;
     @FXML
     private TableColumn<TestStep, String> descriptionColumn;
+
     @FXML
     private VariableTreeController variableTreeController;
+    @FXML
+    private StackPane canvasWrapper;
     private final Map<String, List<TestStep>> scenarioSteps = new HashMap<>();
     // Cache of extra column names per scenario
     private final Map<String, List<String>> scenarioColumns = new HashMap<>();
     @FXML
     private final DataFormatter formatter = new DataFormatter();
+    @FXML
+    private SplitPane rightSplitPane;
 
+    private CanvasController canvasPanelController; // no @FXML here, we set it manually
 
     @FXML
     public void initialize() {
+
+        try {
+            FXMLLoader loader = new FXMLLoader(getClass().getResource("/fxml/CanvasPanel.fxml"));
+            AnchorPane canvasRoot = loader.load();
+            canvasPanelController = loader.getController();
+            // Insert canvasRoot into the SplitPane before the TabPane
+            rightSplitPane.getItems().add(1, canvasRoot);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
 
 
         // --- Test Explorer TreeView setup ---
@@ -114,13 +132,17 @@ public class MainController {
         );
 
         if (sample != null) {
-            steps.add(new TestStep(sample));  // clean and correct
+            steps.add(new TestStep(
+                    sample.getObjectName(),
+                    sample.getActionName(),
+                    sample.getDescription(),
+                    sample.getInputs()   // ✅ pass the list directly
+            ));
         }
 
         // Add a blank row for user editing
-        steps.add(new
+        steps.add(new TestStep("", "", "", new ArrayList<>()));
 
-                TestStep("", "", "", ""));
 
         // Bind to table and scenario map
         tableView.setItems(steps);
@@ -143,21 +165,34 @@ public class MainController {
 
         // Setup columns
         tableView.setEditable(true);
+
+// --- Description column ---
         descriptionColumn.setCellValueFactory(new PropertyValueFactory<>("description"));
         descriptionColumn.setCellFactory(col -> new AutoCommitTextFieldTableCell<>());
-        descriptionColumn.setOnEditCommit(event -> event.getRowValue().
+        descriptionColumn.setOnEditCommit(event ->
+                event.getRowValue().setDescription(event.getNewValue())
+        );
 
-                setDescription(event.getNewValue()));
+// When user edits the cell, split the string into a list
+        inputColumn.setOnEditCommit(event -> {
+            String newValue = event.getNewValue();
+            List<String> values = (newValue == null || newValue.isEmpty())
+                    ? new ArrayList<>()
+                    : List.of(newValue.split("\\|"));
+            event.getRowValue().setInputs(values);
+        });
 
-        inputColumn.setCellFactory(col -> new AutoCommitTextFieldTableCell<>());
-        inputColumn.setOnEditCommit(event -> event.getRowValue().
+// Display joined inputs in the table
+        inputColumn.setCellValueFactory(cellData ->
+                new SimpleStringProperty(cellData.getValue().getJoinedInputs())
+        );
 
-                setInput(event.getNewValue()));
-
-
+// --- Object & Action columns ---
         objectColumn.setCellValueFactory(new PropertyValueFactory<>("object"));
         actionColumn.setCellValueFactory(new PropertyValueFactory<>("action"));
-        inputColumn.setCellValueFactory(new PropertyValueFactory<>("input"));
+
+
+
 
 
         itemColumn.setCellValueFactory(cellData ->
@@ -185,38 +220,42 @@ public class MainController {
             @Override
             protected void updateItem(String item, boolean empty) {
                 super.updateItem(item, empty);
-
-                if (empty || getTableRow() == null) {
+                if (empty || getTableRow() == null || getTableRow().getItem() == null) {
                     setGraphic(null);
-                    return;
+                } else {
+                    TestStep step = getTableRow().getItem();
+
+                    ComboBox<String> combo = new ComboBox<>(objectOptions);
+                    combo.valueProperty().bindBidirectional(step.objectProperty());
+
+                    combo.valueProperty().addListener((obs, oldVal, newVal) -> {
+                        if (newVal != null) {
+                            List<String> methods = actionsByObject.getOrDefault(newVal, List.of());
+                            if (!methods.isEmpty()) step.setAction(methods.get(0));
+                        }
+                    });
+
+                    setGraphic(combo);
                 }
-
-                TestStep step = getTableRow().getItem();
-                if (step == null) {
-                    setGraphic(null);
-                    return;
-                }
-
-                ComboBox<String> combo = new ComboBox<>(objectOptions);
-                combo.valueProperty().bindBidirectional(step.objectProperty());
-
-                combo.valueProperty().addListener((obs, oldVal, newVal) -> {
-                    if (newVal == null) return;
-
-                    List<String> methods = actionsByObject.getOrDefault(newVal, List.of());
-                    if (methods.isEmpty()) return;
-
-                    // Set default action
-                    step.setAction(methods.get(0));
-
-                    // Generate argument columns
-                    addArgumentColumnsForAction(step);
-                    // ❌ no logging here
-                });
-
-                setGraphic(combo);
             }
         });
+
+        // --- Input column ---
+        inputColumn.setOnEditCommit(event -> {
+            String newValue = event.getNewValue();
+            List<String> values = (newValue == null || newValue.isEmpty())
+                    ? new ArrayList<>()
+                    : List.of(newValue.split("\\|"));
+            event.getRowValue().setInputs(values);
+        });
+
+        inputColumn.setCellValueFactory(cellData ->
+                new SimpleStringProperty(cellData.getValue().getJoinedInputs())
+        );
+
+// Use helper for drag‑drop + click‑to‑edit dialog
+        inputColumn.setCellFactory(col -> createInputCell());
+
 
 
         actionColumn.setCellFactory(col -> new TableCell<TestStep, String>() {
@@ -229,26 +268,9 @@ public class MainController {
                     TestStep step = getTableRow().getItem();
 
                     ComboBox<String> combo = new ComboBox<>(
-                            FXCollections.observableArrayList(
-                                    actionsByObject.getOrDefault(step.getObject(), List.of())
-                            )
+                            FXCollections.observableArrayList(actionsByObject.getOrDefault(step.getObject(), List.of()))
                     );
                     combo.valueProperty().bindBidirectional(step.actionProperty());
-
-                    combo.setOnAction(event -> {
-                        ensureArgumentColumns(step);
-
-                        // ✅ single clean log
-                        System.out.println("--- Action Selected ---");
-                        System.out.println("Action: " + step.getAction());
-                        System.out.println("Object: " + step.getObject());
-                        System.out.println("Description: " + step.getDescription());
-                        step.getExtras().forEach((k, v) -> {
-                            String value = v.get() == null ? "" : v.get();
-                            System.out.println("Args: " + k + "=" + value);
-                        });
-                        System.out.println("-----------------------");
-                    });
 
                     setGraphic(combo);
                 }
@@ -256,154 +278,12 @@ public class MainController {
         });
 
 
-        actionColumn.setOnEditCommit(event -> {
-            TestStep step = event.getRowValue();
-            step.setAction(event.getNewValue());
-            ensureArgumentColumns(step); // ✅ auto‑generate ArgN columns
-        });
+        actionColumn.setOnEditCommit(event -> event.getRowValue().
 
-        inputColumn.setCellFactory(col -> new TableCell<TestStep, String>() {
-            @Override
-            protected void updateItem(String item, boolean empty) {
-                super.updateItem(item, empty);
-                setText(empty ? null : (item == null ? "" : item));
-            }
+                setAction(event.getNewValue()));
 
-            {
-                // --- Drag & Drop support ---
-                setOnDragOver(event -> {
-                    if (event.getGestureSource() != this && event.getDragboard().hasString()) {
-                        event.acceptTransferModes(TransferMode.COPY);
-                        setStyle("-fx-background-color: lightgreen;"); // highlight when dragging over
-                    }
-                    event.consume();
-                });
+        
 
-                setOnDragExited(event -> setStyle(""));
-
-                setOnDragDropped(event -> {
-                    Dragboard db = event.getDragboard();
-                    if (db.hasString()) {
-                        String data = db.getString();
-                        String[] parts = data.split("::", 2);
-                        String varName = parts[0];                 // e.g. variable name
-                        String varValue = parts.length > 1 ? parts[1] : ""; // e.g. path|keyword
-
-                        TestStep step = getTableView().getItems().get(getIndex());
-                        step.setInput(varName);   // ✅ save variable name
-                        setText(varName);         // ✅ show variable name in cell
-
-                        // 🔑 Map pipe-separated values into annotation-driven inputs
-                        if (!varValue.isEmpty()) {
-                            String[] values = varValue.split("\\|");
-
-                            for (Method m : ActionLibrary.class.getDeclaredMethods()) {
-                                if (m.getName().equals(step.getAction()) && m.isAnnotationPresent(ActionMeta.class)) {
-                                    ActionMeta meta = m.getAnnotation(ActionMeta.class);
-                                    String[] inputs = meta.inputs();
-                                    for (int i = 0; i < inputs.length && i < values.length; i++) {
-                                        step.setExtra(inputs[i], values[i].trim());
-                                    }
-                                    break;
-                                }
-                            }
-
-                        }
-
-                        // 🔔 Pop-up shows the raw value
-                        Alert alert = new Alert(Alert.AlertType.INFORMATION);
-                        alert.setTitle("Variable Added");
-                        alert.setHeaderText(null);
-                        alert.setContentText("You added value: " + varValue + " into input.");
-                        alert.initModality(Modality.NONE);
-                        alert.show();
-                    }
-                    event.setDropCompleted(true);
-                    event.consume();
-                });
-
-
-                // --- Click-to-edit dialog ---
-                setOnMouseClicked(event -> {
-                    if (!isEmpty()) {
-                        TestStep step = getTableView().getItems().get(getIndex());
-
-                        TextArea editor = new TextArea(step.getInput());
-                        editor.setPrefWidth(600);
-                        editor.setPrefHeight(400);
-                        editor.setWrapText(true);
-                        editor.setStyle("-fx-font-family: Consolas; -fx-font-size: 12;");
-
-                        Dialog<String> dialog = new Dialog<>();
-                        dialog.setTitle("Edit Input");
-                        dialog.setResizable(true);
-
-                        DialogPane pane = dialog.getDialogPane();
-                        pane.setContent(editor);
-                        pane.getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
-
-                        // Save on OK
-                        dialog.setResultConverter(button -> {
-                            if (button == ButtonType.OK) {
-                                return editor.getText();
-                            }
-                            return null;
-                        });
-
-                        // Keyboard shortcuts
-                        Scene scene = pane.getScene();
-
-                        // Ctrl+S → save and close
-                        scene.getAccelerators().put(
-                                new KeyCodeCombination(KeyCode.S, KeyCombination.CONTROL_DOWN),
-                                () -> {
-                                    step.setInput(editor.getText());
-                                    dialog.setResult(editor.getText());
-                                    dialog.close();
-                                }
-                        );
-
-                        // Ctrl+/ → comment/uncomment JSON or XML
-                        scene.getAccelerators().put(
-                                new KeyCodeCombination(KeyCode.SLASH, KeyCombination.CONTROL_DOWN),
-                                () -> {
-                                    IndexRange selection = editor.getSelection();
-                                    if (selection.getLength() > 0) {
-                                        String selectedText = editor.getText(selection.getStart(), selection.getEnd());
-                                        StringBuilder sb = new StringBuilder();
-
-                                        boolean isXml = selectedText.trim().startsWith("<");
-                                        String[] lines = selectedText.split("\n");
-
-                                        if (isXml) {
-                                            if (selectedText.trim().startsWith("<!--")) {
-                                                sb.append(selectedText.replaceAll("<!--", "").replaceAll("-->", ""));
-                                            } else {
-                                                sb.append("<!--\n").append(selectedText).append("\n-->");
-                                            }
-                                        } else {
-                                            for (String line : lines) {
-                                                if (line.trim().startsWith("//")) {
-                                                    sb.append(line.replaceFirst("// ?", "")).append("\n");
-                                                } else {
-                                                    sb.append("// ").append(line).append("\n");
-                                                }
-                                            }
-                                        }
-                                        editor.replaceText(selection, sb.toString());
-                                    }
-                                }
-                        );
-
-                        dialog.showAndWait().ifPresent(result -> {
-                            if (result != null) {
-                                step.setInput(result);
-                            }
-                        });
-                    }
-                });
-            }
-        });
 
 
         testExplorerLabel.setGraphic(
@@ -493,7 +373,10 @@ public class MainController {
                             s.addProperty("item", step.getItem());
                             s.addProperty("action", step.getAction());
                             s.addProperty("object", step.getObject());
-                            s.addProperty("input", step.getInput());
+
+                            // ✅ Save joined inputs instead of single string
+                            s.addProperty("input", step.getJoinedInputs());
+
                             s.addProperty("description", step.getDescription());
 
                             JsonObject extras = new JsonObject();
@@ -512,6 +395,7 @@ public class MainController {
                     } else {
                         content.putString(type + "::" + name);
                     }
+
 
                     Clipboard clipboard = Clipboard.getSystemClipboard();
                     clipboard.setContent(content);
@@ -548,7 +432,8 @@ public class MainController {
                                                 s.get("item").getAsString(),
                                                 s.get("action").getAsString(),
                                                 s.get("object").getAsString(),
-                                                s.get("input").getAsString()
+                                                // ✅ split the joined string back into a list
+                                                List.of(s.get("input").getAsString().split("\\|"))
                                         );
                                         step.setDescription(s.get("description").getAsString());
 
@@ -584,7 +469,7 @@ public class MainController {
 
                                     if (copiedType == NodeType.TEST_SCENARIO) {
                                         scenarioSteps.put(makeKey(newNode),
-                                                new ArrayList<>(List.of(new TestStep("", "", "", ""))));
+                                                new ArrayList<>(List.of(new TestStep("", "", "", new ArrayList<>()))));
                                         scenarioColumns.put(makeKey(newNode), new ArrayList<>());
                                     }
                                 } else {
@@ -595,6 +480,7 @@ public class MainController {
                     }
                 }
             });
+
 
 
             menu.getItems().addAll(renameItem, copyItem, pasteItem);
@@ -795,28 +681,40 @@ public class MainController {
                 sb.append(selectedStep.getItem()).append("|")
                         .append(selectedStep.getAction()).append("|")
                         .append(selectedStep.getObject()).append("|")
-                        .append(selectedStep.getInput()).append("|")
+                        // ✅ use joined inputs instead of single string
+                        .append(selectedStep.getJoinedInputs()).append("|")
                         .append(selectedStep.getDescription());
-                selectedStep.getExtras().forEach((k, v) -> sb.append("|").append(k).append("=").append(v.get()));
+
+                selectedStep.getExtras().forEach((k, v) ->
+                        sb.append("|").append(k).append("=").append(v.get())
+                );
+
                 content.putString(sb.toString());
                 Clipboard.getSystemClipboard().setContent(content);
             }
+
         });
 
         MenuItem pasteRowItem = new MenuItem("Paste Row");
-        pasteRowItem.setOnAction(e ->
-
-        {
+        pasteRowItem.setOnAction(e -> {
             Clipboard clipboard = Clipboard.getSystemClipboard();
             if (clipboard.hasString()) {
                 String[] parts = clipboard.getString().split("\\|");
                 if (parts.length >= 5) {
-                    TestStep newStep = new TestStep(parts[0], parts[1], parts[2], parts[3]);
+                    // ✅ split the 4th part (inputs) into a list
+                    List<String> inputs = (parts[3] == null || parts[3].isEmpty())
+                            ? new ArrayList<>()
+                            : List.of(parts[3].split("\\|"));
+
+                    TestStep newStep = new TestStep(parts[0], parts[1], parts[2], inputs);
                     newStep.setDescription(parts[4]);
+
+                    // ✅ restore extras
                     for (int i = 5; i < parts.length; i++) {
                         String[] kv = parts[i].split("=", 2);
                         if (kv.length == 2) newStep.setExtra(kv[0], kv[1]);
                     }
+
                     int index = tableView.getSelectionModel().getSelectedIndex();
                     if (index >= 0) {
                         tableView.getItems().add(index + 1, newStep);
@@ -827,12 +725,135 @@ public class MainController {
             }
         });
 
+
         tableMenu.getItems().
 
                 addAll(copyRowItem, pasteRowItem);
         tableView.setContextMenu(tableMenu);
 
     }
+
+    private TableCell<TestStep, String> createInputCell() {
+        return new TableCell<>() {
+            @Override
+            protected void updateItem(String item, boolean empty) {
+                super.updateItem(item, empty);
+                setText(empty ? null : (item == null ? "" : item));
+            }
+            {
+                setupDragDropSupport(this);
+                setupClickToEditDialog(this);
+            }
+        };
+    }
+
+    private void setupDragDropSupport(TableCell<TestStep, String> cell) {
+        cell.setOnDragOver(event -> {
+            if (event.getGestureSource() != cell && event.getDragboard().hasString()) {
+                event.acceptTransferModes(TransferMode.COPY);
+                cell.setStyle("-fx-background-color: lightgreen;");
+            }
+            event.consume();
+        });
+
+        cell.setOnDragExited(event -> cell.setStyle(""));
+
+        cell.setOnDragDropped(event -> {
+            Dragboard db = event.getDragboard();
+            if (db.hasString()) {
+                String[] parts = db.getString().split("::", 2);
+                String varName = parts[0];
+                String varValue = parts.length > 1 ? parts[1] : "";
+
+                TestStep step = cell.getTableView().getItems().get(cell.getIndex());
+                step.setInputs(List.of(varValue));
+                cell.setText(varName);
+
+                Alert alert = new Alert(Alert.AlertType.INFORMATION);
+                alert.setTitle("Variable Added");
+                alert.setHeaderText("Variable " + varName + " resolved");
+                alert.setContentText("Actual value stored: " + varValue);
+                alert.initModality(Modality.NONE);
+                alert.show();
+            }
+            event.setDropCompleted(true);
+            event.consume();
+        });
+    }
+
+    private void setupClickToEditDialog(TableCell<TestStep, String> cell) {
+        cell.setOnMouseClicked(event -> {
+            if (!cell.isEmpty()) {
+                TestStep step = cell.getTableView().getItems().get(cell.getIndex());
+                showInputEditorDialog(step);
+            }
+        });
+    }
+
+    private void showInputEditorDialog(TestStep step) {
+        TextArea editor = new TextArea(step.getJoinedInputs());
+        editor.setPrefWidth(600);
+        editor.setPrefHeight(400);
+        editor.setWrapText(true);
+        editor.setStyle("-fx-font-family: Consolas; -fx-font-size: 12;");
+
+        Dialog<String> dialog = new Dialog<>();
+        dialog.setTitle("Edit Input");
+        dialog.setResizable(true);
+
+        DialogPane pane = dialog.getDialogPane();
+        pane.setContent(editor);
+        pane.getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
+
+        dialog.setResultConverter(button -> button == ButtonType.OK ? editor.getText() : null);
+
+        Scene scene = pane.getScene();
+        scene.getAccelerators().put(
+                new KeyCodeCombination(KeyCode.S, KeyCombination.CONTROL_DOWN),
+                () -> {
+                    step.setJoinedInputs(editor.getText());
+                    dialog.setResult(editor.getText());
+                    dialog.close();
+                }
+        );
+        scene.getAccelerators().put(
+                new KeyCodeCombination(KeyCode.SLASH, KeyCombination.CONTROL_DOWN),
+                () -> toggleComment(editor)
+        );
+
+        dialog.showAndWait().ifPresent(result -> {
+            if (result != null) step.setJoinedInputs(result);
+        });
+    }
+
+    private void toggleComment(TextArea editor) {
+        IndexRange selection = editor.getSelection();
+        if (selection.getLength() > 0) {
+            String selectedText = editor.getText(selection.getStart(), selection.getEnd());
+            StringBuilder sb = new StringBuilder();
+
+            boolean isXml = selectedText.trim().startsWith("<");
+            String[] lines = selectedText.split("\n");
+
+            if (isXml) {
+                if (selectedText.trim().startsWith("<!--")) {
+                    sb.append(selectedText.replaceAll("<!--", "").replaceAll("-->", ""));
+                } else {
+                    sb.append("<!--\n").append(selectedText).append("\n-->");
+                }
+            } else {
+                for (String line : lines) {
+                    if (line.trim().startsWith("//")) {
+                        sb.append(line.replaceFirst("// ?", "")).append("\n");
+                    } else {
+                        sb.append("// ").append(line).append("\n");
+                    }
+                }
+            }
+            editor.replaceText(selection, sb.toString());
+        }
+    }
+
 
     @FXML
     private void handleNewSuite(ActionEvent event) {
@@ -881,7 +902,8 @@ public class MainController {
                     // ✅ Seed with one blank row
                     String key = makeKey(testScenario);
                     List<TestStep> steps = new ArrayList<>();
-                    steps.add(new TestStep("", "", "", ""));
+                    steps.add(new TestStep("", "", "", new ArrayList<>())); // <-- updated
+
                     scenarioSteps.put(key, steps);
 
                     // ✅ If this new scenario is selected immediately, show it
@@ -896,6 +918,7 @@ public class MainController {
             showError("TestScenario can only be added inside a Suite or Sub-Suite.");
         }
     }
+
 
 
     @FXML
@@ -923,10 +946,13 @@ public class MainController {
         List<TestStep> copy = new ArrayList<>();
         int rowNum = 1;
         for (TestStep step : tableView.getItems()) {
-            TestStep clone = new TestStep(String.valueOf(rowNum++),
+            // ✅ clone with inputs as a list
+            TestStep clone = new TestStep(
+                    String.valueOf(rowNum++),
                     step.getAction(),
                     step.getObject(),
-                    step.getInput());
+                    new ArrayList<>(step.getInputs()) // copy the list
+            );
             clone.setDescription(step.getDescription());
 
             // Copy extras
@@ -939,6 +965,7 @@ public class MainController {
         scenarioSteps.put(key, copy);
     }
 
+
     private void loadTestScenario(TreeItem<TestNode> scenario) {
         // Reset to default columns
         tableView.getColumns().setAll(itemColumn, objectColumn, actionColumn, descriptionColumn, inputColumn);
@@ -949,8 +976,16 @@ public class MainController {
         // Clone steps so edits don’t mutate the original list directly
         ObservableList<TestStep> clonedSteps = FXCollections.observableArrayList();
         for (TestStep step : steps) {
-            TestStep clone = new TestStep(step.getItem(), step.getAction(), step.getObject(), step.getInput());
+            // ✅ clone with inputs as a list
+            TestStep clone = new TestStep(
+                    step.getItem(),
+                    step.getAction(),
+                    step.getObject(),
+                    new ArrayList<>(step.getInputs()) // copy the list
+            );
             clone.setDescription(step.getDescription());
+
+            // Copy extras
             for (Map.Entry<String, SimpleStringProperty> entry : step.getExtras().entrySet()) {
                 clone.setExtra(entry.getKey(), entry.getValue().get());
             }
@@ -965,7 +1000,9 @@ public class MainController {
         descriptionColumn.setOnEditCommit(event -> event.getRowValue().setDescription(event.getNewValue()));
 
         // ✅ Keep your custom dialog editor for inputColumn
-        inputColumn.setCellValueFactory(new PropertyValueFactory<>("input"));
+        inputColumn.setCellValueFactory(cellData ->
+                new SimpleStringProperty(cellData.getValue().getJoinedInputs())
+        );
         // Do NOT overwrite inputColumn’s cellFactory here — it was already set up in initialize()
 
         // ✅ Re‑apply auto‑commit factories for extras
@@ -978,6 +1015,7 @@ public class MainController {
             tableView.getColumns().add(extraColumn);
         }
     }
+
 
 
     private void showError(String message) {
@@ -1022,8 +1060,10 @@ public class MainController {
     @FXML
     private void handleAddRow(ActionEvent event) {
         int nextIndex = tableView.getItems().size() + 1;
-        tableView.getItems().add(new TestStep("", "", "", ""));
+        // ✅ Use an empty list for inputs instead of a single empty string
+        tableView.getItems().add(new TestStep("", "", "", new ArrayList<>()));
     }
+
 
     @FXML
     private void handleDeleteRow(ActionEvent event) {
@@ -1040,38 +1080,27 @@ public class MainController {
             return;
         }
 
+        String key = makeKey(selected);
         String colName = "Extra" + (tableView.getColumns().size() - 4);
-        addColumnForScenario(selected, colName);
-    }
-
-    private void addColumnForScenario(TreeItem<TestNode> scenario, String colName) {
-        String key = makeKey(scenario);
-
-        // 🔑 Prevent duplicates
-        boolean exists = tableView.getColumns().stream()
-                .anyMatch(c -> c.getText().equals(colName));
-        if (exists) return;
 
         TableColumn<TestStep, String> extraColumn = new TableColumn<>(colName);
         extraColumn.setCellValueFactory(cellData -> cellData.getValue().getExtraProperty(colName));
         extraColumn.setCellFactory(col -> new AutoCommitTextFieldTableCell<>());
         extraColumn.setOnEditCommit(evt -> evt.getRowValue().setExtra(colName, evt.getNewValue()));
 
+        // ✅ Add context menu for renaming
         MenuItem renameCol = new MenuItem("Rename…");
-        renameCol.setOnAction(e -> handleRenameColumn(extraColumn, scenario));
+        renameCol.setOnAction(e -> {
+            TreeItem<TestNode> scenario = treeView.getSelectionModel().getSelectedItem();
+            handleRenameColumn(extraColumn, scenario);
+        });
         extraColumn.setContextMenu(new ContextMenu(renameCol));
 
         tableView.getColumns().add(extraColumn);
 
+        // Record column name for this scenario
         scenarioColumns.computeIfAbsent(key, k -> new ArrayList<>()).add(colName);
     }
-
-    private void clearArgumentColumns() {
-        tableView.getColumns().removeIf(c ->
-                scenarioColumns.values().stream().anyMatch(cols -> cols.contains(c.getText()))
-        );
-    }
-
 
 
     @FXML
@@ -1176,7 +1205,9 @@ public class MainController {
                 stepRow.createCell(colIndex++).setCellValue(step.getObject());
                 stepRow.createCell(colIndex++).setCellValue(step.getAction());
                 stepRow.createCell(colIndex++).setCellValue(step.getDescription());
-                stepRow.createCell(colIndex++).setCellValue(step.getInput());
+
+                // ✅ use joined inputs instead of single string
+                stepRow.createCell(colIndex++).setCellValue(step.getJoinedInputs());
 
                 for (String colName : extras) {
                     stepRow.createCell(colIndex++).setCellValue(step.getExtra(colName));
@@ -1190,41 +1221,74 @@ public class MainController {
     }
 
 
+
     private void resetDefaultColumns() {
         tableView.getColumns().setAll(itemColumn, objectColumn, actionColumn, descriptionColumn, inputColumn);
     }
 
     @FXML
     private void handleRun(ActionEvent event) {
-        // Run the selected row in the table
-        TestStep step = tableView.getSelectionModel().getSelectedItem();
-        if (step == null) {
-            System.out.println("⚠️ No step selected to run.");
-            return;
+        // Run the first row (or selected row) in the table
+        if (!tableView.getItems().isEmpty()) {
+            TestStep step = tableView.getItems().get(0); // or use tableView.getSelectionModel().getSelectedItem()
+
+            // 🔎 Resolve variable names into actual values
+            List<String> resolvedInputs = new ArrayList<>(step.getInputs());
+            if (variableTreeController != null) {
+                for (int i = 0; i < resolvedInputs.size(); i++) {
+                    String input = resolvedInputs.get(i);
+                    if (input != null && !input.isBlank() && variableTreeController.hasVariable(input)) {
+                        // Replace variable name with its actual value
+                        String value = variableTreeController.getVariableValue(input);
+                        if (value != null) {
+                            resolvedInputs.set(i, value);
+                        }
+                    }
+                }
+            }
+
+            // Build TestCase with resolved inputs
+            TestCase testCase = new TestCase(
+                    step.getObject(),
+                    step.getAction(),
+                    step.getDescription(),
+                    resolvedInputs
+            );
+
+            // Execute the test
+            Object resultObj = TestExecutor.runTest(testCase);
+            boolean result = resultObj instanceof Boolean && (Boolean) resultObj;
+
+            System.out.println("Result: " + result);
+
+            // Update canvas with PASS/FAIL icon
+            canvasPanelController.clearCanvas();
+            if (result) {
+                canvasPanelController.drawPassIcon(50, 50);
+            } else {
+                canvasPanelController.drawFailIcon(50, 50);
+            }
         }
-
-        // Run directly from the TestStep
-        Object resultObj = TestExecutor.runTest(step);
-        boolean result = resultObj instanceof Boolean && (Boolean) resultObj;
-
-        // Optional: final confirmation line
-        System.out.println("Final Result: " + result);
     }
-
-
 
     public static TestCase getTestByAction(Class<?> clazz, String actionName) {
         for (Method method : clazz.getDeclaredMethods()) {
             if (method.isAnnotationPresent(ActionMeta.class)) {
                 ActionMeta meta = method.getAnnotation(ActionMeta.class);
                 if (method.getName().equals(actionName)) {
-                    return new TestCase(meta.objectName(), method.getName(),
-                            meta.description(), String.join(",", meta.inputs()));
+                    // ✅ Pass inputs as a list instead of a joined string
+                    return new TestCase(
+                            meta.objectName(),
+                            method.getName(),
+                            meta.description(),
+                            List.of(meta.inputs())
+                    );
                 }
             }
         }
         return null;
     }
+
 
     private void handleRenameNode(TreeItem<TestNode> node) {
         TextInputDialog dialog = new TextInputDialog(node.getValue().getName());
@@ -1295,47 +1359,6 @@ public class MainController {
             TestStep step = items.remove(index);
             items.add(index + 1, step);
             tableView.getSelectionModel().select(index + 1);
-        }
-    }
-
-    private void ensureArgumentColumns(TestStep step) {
-        // ❌ no logging here, just column generation
-
-        for (Method m : ActionLibrary.class.getDeclaredMethods()) {
-            if (m.getName().equals(step.getAction()) && m.isAnnotationPresent(ActionMeta.class)) {
-                ActionMeta meta = m.getAnnotation(ActionMeta.class);
-                for (String inputName : meta.inputs()) {
-                    TreeItem<TestNode> scenario = treeView.getSelectionModel().getSelectedItem();
-                    if (scenario != null && scenario.getValue().getType() == NodeType.TEST_SCENARIO) {
-                        boolean exists = tableView.getColumns().stream()
-                                .anyMatch(c -> c.getText().equals(inputName));
-                        if (!exists) {
-                            addColumnForScenario(scenario, inputName);
-                        }
-                    }
-                }
-                break; // stop once we’ve handled the matching method
-            }
-        }
-    }
-
-
-    private void addArgumentColumnsForAction(TestStep step) {
-        for (Method m : ActionLibrary.class.getDeclaredMethods()) {
-            if (m.getName().equals(step.getAction()) && m.isAnnotationPresent(ActionMeta.class)) {
-                ActionMeta meta = m.getAnnotation(ActionMeta.class);
-                for (String inputName : meta.inputs()) {
-                    TreeItem<TestNode> scenario = treeView.getSelectionModel().getSelectedItem();
-                    if (scenario != null && scenario.getValue().getType() == NodeType.TEST_SCENARIO) {
-                        boolean exists = tableView.getColumns().stream()
-                                .anyMatch(c -> c.getText().equals(inputName));
-                        if (!exists) {
-                            addColumnForScenario(scenario, inputName);
-                        }
-                    }
-                }
-                break; // stop once we’ve handled the matching method
-            }
         }
     }
 

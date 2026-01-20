@@ -10,9 +10,9 @@
             xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1"
             fx:controller="org.automonius.MainController">
 
-    <stylesheets>
-        <String fx:value="@css/styles.css"/>
-    </stylesheets>
+<!--    <stylesheets>-->
+<!--        <String fx:value="@css/styles.css"/>-->
+<!--    </stylesheets>-->
 
     <children>
 
