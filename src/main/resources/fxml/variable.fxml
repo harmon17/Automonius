@@ -1,8 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
-
 <?import javafx.scene.control.*?>
 <?import javafx.scene.layout.*?>
 <?import org.kordamp.ikonli.javafx.FontIcon?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+<?import org.kordamp.ikonli.javafx.FontIcon?>
+
+
 
 <VBox xmlns="http://javafx.com/javafx/21"
       xmlns:fx="http://javafx.com/fxml/1"
@@ -12,18 +16,30 @@
     <!-- Title -->
     <Label text="Variables / Objects" styleClass="explorer-label"/>
 
-    <!-- Control buttons (icon-only, orange HBox like Explorer) -->
+    <!-- Control buttons -->
     <HBox spacing="6" alignment="CENTER" styleClass="group-b-box">
         <children>
-            <!-- Add Category -->
-            <Button onAction="#addCategory" styleClass="rounded-addrow-btn">
-                <graphic><FontIcon iconLiteral="mdi-folder-plus" iconSize="16"/></graphic>
-                <tooltip><Tooltip text="Add Category"/></tooltip>
+            <!-- Add Region -->
+            <Button  styleClass="rounded-addrow-btn">
+                <graphic><FontIcon iconLiteral="mdi-earth" iconSize="16"/></graphic>
+                <tooltip><Tooltip text="Add Region"/></tooltip>
+            </Button>
+
+            <!-- Add Entity -->
+            <Button  styleClass="rounded-addrow-btn">
+                <graphic><FontIcon iconLiteral="mdi-domain" iconSize="16"/></graphic>
+                <tooltip><Tooltip text="Add Entity"/></tooltip>
+            </Button>
+
+            <!-- Add Module -->
+            <Button  styleClass="rounded-addrow-btn">
+                <graphic><FontIcon iconLiteral="mdi-view-module" iconSize="16"/></graphic>
+                <tooltip><Tooltip text="Add Module"/></tooltip>
             </Button>
 
             <!-- Add Variable -->
             <Button onAction="#addVariable" styleClass="rounded-addrow-btn">
-                <graphic><FontIcon iconLiteral="mdi-folder-plus" iconSize="16"/></graphic>
+                <graphic><FontIcon iconLiteral="mdi-format-list-bulleted" iconSize="16"/></graphic>
                 <tooltip><Tooltip text="Add Variable"/></tooltip>
             </Button>
 
@@ -36,5 +52,18 @@
     </HBox>
 
     <!-- Variables TreeView -->
-    <TreeView fx:id="variablesTree"/>
+    <TreeView fx:id="variablesTree">
+        <!-- Context menu for run actions -->
+        <contextMenu>
+            <ContextMenu>
+                <items>
+                    <MenuItem text="Run Variable" />
+                    <MenuItem text="Run Module" />
+                    <MenuItem text="Run Entity" />
+                    <MenuItem text="Run Region" />
+                </items>
+            </ContextMenu>
+        </contextMenu>
+    </TreeView>
+
 </VBox>

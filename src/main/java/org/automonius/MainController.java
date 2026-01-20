@@ -1,5 +1,5 @@
 package org.automonius;
-
+import java.util.Arrays;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
@@ -24,6 +24,7 @@ import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
 import javafx.stage.Modality;
 import javafx.stage.Stage;
+import javafx.util.converter.DefaultStringConverter;
 import org.apache.poi.ss.usermodel.DataFormatter;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
@@ -83,8 +84,6 @@ public class MainController {
 
     @FXML
     public void initialize() {
-
-
         // --- Test Explorer TreeView setup ---
         TreeItem<TestNode> explorerRoot = new TreeItem<>(new TestNode("Directory Structure", NodeType.ROOT));
         explorerRoot.setExpanded(true);
@@ -170,6 +169,8 @@ public class MainController {
 
         itemColumn.setEditable(false);
 
+        rebuildArgumentColumns();
+
         itemColumn.setCellFactory(col -> new TableCell<TestStep, String>() {
             @Override
             protected void updateItem(String item, boolean empty) {
@@ -209,9 +210,9 @@ public class MainController {
                     // Set default action
                     step.setAction(methods.get(0));
 
-                    // Generate argument columns
-                    addArgumentColumnsForAction(step);
-                    // ❌ no logging here
+                    // 🔧 Trigger rebuild + update headers
+                    rebuildArgumentColumns();
+                    updateColumnHeadersForAction();
                 });
 
                 setGraphic(combo);
@@ -236,9 +237,10 @@ public class MainController {
                     combo.valueProperty().bindBidirectional(step.actionProperty());
 
                     combo.setOnAction(event -> {
-                        ensureArgumentColumns(step);
+                        // 🔧 Trigger rebuild + update headers (no args now)
+                        rebuildArgumentColumns();
+                        updateColumnHeadersForAction(); // <-- fixed
 
-                        // ✅ single clean log
                         System.out.println("--- Action Selected ---");
                         System.out.println("Action: " + step.getAction());
                         System.out.println("Object: " + step.getObject());
@@ -255,12 +257,17 @@ public class MainController {
             }
         });
 
-
+// 🔧 Replace old ensureArgumentColumns with rebuild + update
         actionColumn.setOnEditCommit(event -> {
             TestStep step = event.getRowValue();
             step.setAction(event.getNewValue());
-            ensureArgumentColumns(step); // ✅ auto‑generate ArgN columns
+
+            // 🔧 Trigger rebuild + update headers (no args now)
+            rebuildArgumentColumns();
+            updateColumnHeadersForAction(); // <-- fixed
         });
+
+
 
         inputColumn.setCellFactory(col -> new TableCell<TestStep, String>() {
             @Override
@@ -865,7 +872,6 @@ public class MainController {
         if (selected != null &&
                 (selected.getValue().getType() == NodeType.SUITE || selected.getValue().getType() == NodeType.SUB_SUITE)) {
 
-            // ✅ Default name is just "TestSuite" (no numbering)
             TextInputDialog dialog = new TextInputDialog("TestSuite");
             dialog.setTitle("New TestSuite");
             dialog.setHeaderText("Create a new TestSuite");
@@ -878,10 +884,10 @@ public class MainController {
                     );
                     selected.getChildren().add(testScenario);
 
-                    // ✅ Seed with one blank row
+                    // ✅ Seed with one truly blank row (nulls, not "")
                     String key = makeKey(testScenario);
                     List<TestStep> steps = new ArrayList<>();
-                    steps.add(new TestStep("", "", "", ""));
+                    steps.add(new TestStep(null, null, null, null)); // <-- important change
                     scenarioSteps.put(key, steps);
 
                     // ✅ If this new scenario is selected immediately, show it
@@ -896,6 +902,7 @@ public class MainController {
             showError("TestScenario can only be added inside a Suite or Sub-Suite.");
         }
     }
+
 
 
     @FXML
@@ -940,13 +947,13 @@ public class MainController {
     }
 
     private void loadTestScenario(TreeItem<TestNode> scenario) {
-        // Reset to default columns
+        // Reset to base columns
         tableView.getColumns().setAll(itemColumn, objectColumn, actionColumn, descriptionColumn, inputColumn);
 
         String key = makeKey(scenario);
         List<TestStep> steps = scenarioSteps.getOrDefault(key, new ArrayList<>());
 
-        // Clone steps so edits don’t mutate the original list directly
+        // Clone steps
         ObservableList<TestStep> clonedSteps = FXCollections.observableArrayList();
         for (TestStep step : steps) {
             TestStep clone = new TestStep(step.getItem(), step.getAction(), step.getObject(), step.getInput());
@@ -959,23 +966,60 @@ public class MainController {
 
         tableView.setItems(clonedSteps);
 
-        // ✅ Re‑apply auto‑commit factories for description
+        // Re‑apply factories for description
         descriptionColumn.setCellValueFactory(new PropertyValueFactory<>("description"));
         descriptionColumn.setCellFactory(col -> new AutoCommitTextFieldTableCell<>());
         descriptionColumn.setOnEditCommit(event -> event.getRowValue().setDescription(event.getNewValue()));
 
-        // ✅ Keep your custom dialog editor for inputColumn
+        // Keep custom dialog editor for inputColumn
         inputColumn.setCellValueFactory(new PropertyValueFactory<>("input"));
-        // Do NOT overwrite inputColumn’s cellFactory here — it was already set up in initialize()
 
-        // ✅ Re‑apply auto‑commit factories for extras
+        // ✅ Rebuild ArgN columns consistently
+        rebuildArgumentColumns();
+
+        // ✅ Merge scenario extras into ArgN placeholders
         List<String> extras = scenarioColumns.getOrDefault(key, List.of());
-        for (String colName : extras) {
-            TableColumn<TestStep, String> extraColumn = new TableColumn<>(colName);
-            extraColumn.setCellValueFactory(cellData -> cellData.getValue().getExtraProperty(colName));
-            extraColumn.setCellFactory(col -> new AutoCommitTextFieldTableCell<>());
-            extraColumn.setOnEditCommit(evt -> evt.getRowValue().setExtra(colName, evt.getNewValue()));
-            tableView.getColumns().add(extraColumn);
+
+        for (int i = 0; i < tableView.getColumns().size(); i++) {
+            TableColumn<TestStep, ?> baseCol = tableView.getColumns().get(i);
+
+            if ("Dynamic".equals(baseCol.getUserData())) {
+                // Cast to correct generic type
+                @SuppressWarnings("unchecked")
+                TableColumn<TestStep, String> col = (TableColumn<TestStep, String>) baseCol;
+
+                final int colIndex = i - 5; // offset after base columns
+                final String extraName = (colIndex >= 0 && colIndex < extras.size()) ? extras.get(colIndex) : null;
+
+                col.setCellFactory(tc -> new TableCell<TestStep, String>() {
+                    @Override
+                    protected void updateItem(String item, boolean empty) {
+                        super.updateItem(item, empty);
+                        if (empty || getTableRow() == null) {
+                            setText(null);
+                            return;
+                        }
+
+                        TestStep step = getTableRow().getItem();
+                        String[] inputs = getInputsForAction(step.getAction());
+
+                        if (colIndex >= 0 && colIndex < inputs.length) {
+                            String inputName = inputs[colIndex];
+                            if (item == null || item.isBlank()) {
+                                // Prefer scenario extra name if available, else use inputName
+                                setText(extraName != null ? extraName : inputName);
+                                setStyle("-fx-text-fill: gray; -fx-font-style: italic;");
+                            } else {
+                                setText(item);
+                                setStyle("");
+                            }
+                        } else {
+                            setText(""); // unused
+                            setStyle("-fx-text-fill: lightgray;");
+                        }
+                    }
+                });
+            }
         }
     }
 
@@ -1341,6 +1385,127 @@ public class MainController {
                 }
                 break; // stop once we’ve handled the matching method
             }
+        }
+    }
+
+    private void rebuildArgumentColumns() {
+        // Remove old dynamic columns
+        tableView.getColumns().removeIf(c -> "Dynamic".equals(c.getUserData()));
+
+        // Find max inputs across all actions
+        int maxInputs = Arrays.stream(ActionLibrary.class.getDeclaredMethods())
+                .filter(m -> m.isAnnotationPresent(ActionMeta.class))
+                .mapToInt(m -> m.getAnnotation(ActionMeta.class).inputs().length)
+                .max()
+                .orElse(0);
+
+        // Add Arg1…ArgN columns
+        for (int i = 0; i < maxInputs; i++) {
+            final int colIndex = i;
+            TableColumn<TestStep, String> col = new TableColumn<>("Arg" + (i + 1));
+            col.setUserData("Dynamic");
+
+            // Always editable globally — per-row logic decides if editing is allowed
+            col.setEditable(true);
+
+            // Value factory: bind per row
+            col.setCellValueFactory(cellData -> {
+                TestStep step = cellData.getValue();
+                if (step == null || step.getAction() == null || step.getAction().isBlank()) {
+                    return new ReadOnlyStringWrapper(""); // 🚫 no action → blank
+                }
+                String[] inputs = getInputsForAction(step.getAction());
+                if (colIndex < inputs.length) {
+                    return step.getExtraProperty(inputs[colIndex]);
+                } else {
+                    return new ReadOnlyStringWrapper(""); // unused
+                }
+            });
+
+            // Cell factory: per-row placeholder + editability
+            col.setCellFactory(tc -> new TableCell<TestStep, String>() {
+                @Override
+                public void startEdit() {
+                    TestStep step = getTableRow() != null ? getTableRow().getItem() : null;
+                    if (step == null || step.getAction() == null || step.getAction().isBlank()) {
+                        return; // 🚫 no action → don’t allow edit
+                    }
+                    String[] inputs = getInputsForAction(step.getAction());
+                    if (colIndex < inputs.length) {
+                        super.startEdit();
+                        if (getGraphic() instanceof TextField tf) {
+                            tf.setPromptText(inputs[colIndex]);
+                        }
+                    }
+                }
+
+                @Override
+                protected void updateItem(String item, boolean empty) {
+                    super.updateItem(item, empty);
+                    if (empty || getTableRow() == null) {
+                        setText(null);
+                        return;
+                    }
+
+                    TestStep step = getTableRow().getItem();
+                    if (step == null || step.getAction() == null || step.getAction().isBlank()) {
+                        setText(""); // 🚫 no action → blank
+                        setStyle("-fx-text-fill: lightgray;");
+                        return;
+                    }
+
+                    String[] inputs = getInputsForAction(step.getAction());
+                    if (colIndex < inputs.length) {
+                        String inputName = inputs[colIndex];
+                        if (item == null || item.isBlank()) {
+                            setText(inputName); // placeholder
+                            setStyle("-fx-text-fill: gray; -fx-font-style: italic;");
+                        } else {
+                            setText(item);
+                            setStyle("");
+                        }
+                    } else {
+                        setText(""); // unused
+                        setStyle("-fx-text-fill: lightgray;");
+                    }
+                }
+            });
+
+            // Edit commit: per-row resolution
+            col.setOnEditCommit(event -> {
+                TestStep step = event.getRowValue();
+                if (step == null || step.getAction() == null || step.getAction().isBlank()) {
+                    return; // 🚫 no action → ignore
+                }
+                String[] inputs = getInputsForAction(step.getAction());
+                if (colIndex < inputs.length) {
+                    step.setExtra(inputs[colIndex], event.getNewValue());
+                }
+            });
+
+            tableView.getColumns().add(col);
+        }
+    }
+
+    // Helper to fetch inputs for an action
+    private String[] getInputsForAction(String actionName) {
+        return Arrays.stream(ActionLibrary.class.getDeclaredMethods())
+                .filter(m -> m.getName().equals(actionName) && m.isAnnotationPresent(ActionMeta.class))
+                .findFirst()
+                .map(m -> m.getAnnotation(ActionMeta.class).inputs())
+                .orElse(new String[0]);
+    }
+
+
+    private void updateColumnHeadersForAction() {
+        List<TableColumn<TestStep, ?>> dynamicCols = tableView.getColumns().stream()
+                .filter(c -> "Dynamic".equals(c.getUserData()))
+                .toList();
+
+        for (int i = 0; i < dynamicCols.size(); i++) {
+            @SuppressWarnings("unchecked")
+            TableColumn<TestStep, String> col = (TableColumn<TestStep, String>) dynamicCols.get(i);
+            col.setText("Arg" + (i + 1)); // ✅ stable header only
         }
     }
 

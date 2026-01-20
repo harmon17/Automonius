@@ -96,20 +96,22 @@ public class VariableTreeController {
 
         variablesTree.setRoot(root);
 
-        // Drag support: only put variable name
+        // Drag support
         variablesTree.setOnDragDetected(event -> {
             TreeItem<Variable> selected = variablesTree.getSelectionModel().getSelectedItem();
             if (selected != null && "variable".equals(selected.getValue().getType())) {
                 Dragboard db = variablesTree.startDragAndDrop(TransferMode.COPY);
                 ClipboardContent content = new ClipboardContent();
 
-                // Only put the variable name
-                content.putString(selected.getValue().getName());
+                // Put both name and value in dragboard
+                content.putString(selected.getValue().getName() + "::" + selected.getValue().getValue());
 
                 db.setContent(content);
                 event.consume();
             }
         });
+
+
     }
 
     @FXML
@@ -162,32 +164,5 @@ public class VariableTreeController {
         for (TreeItem<Variable> child : node.getChildren()) {
             collectVariableNames(child, names);
         }
-    }
-
-    // 🔎 New helpers for MainController
-    public boolean hasVariable(String name) {
-        return findVariable(name) != null;
-    }
-
-    public String getVariableValue(String name) {
-        Variable v = findVariable(name);
-        return v != null ? v.getValue() : null;
-    }
-
-    private Variable findVariable(String name) {
-        return findVariableRecursive(variablesTree.getRoot(), name);
-    }
-
-    private Variable findVariableRecursive(TreeItem<Variable> node, String name) {
-        if (node == null) return null;
-        Variable v = node.getValue();
-        if (v != null && "variable".equals(v.getType()) && v.getName().equals(name)) {
-            return v;
-        }
-        for (TreeItem<Variable> child : node.getChildren()) {
-            Variable found = findVariableRecursive(child, name);
-            if (found != null) return found;
-        }
-        return null;
     }
 }
