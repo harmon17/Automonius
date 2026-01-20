@@ -14,6 +14,7 @@ import javafx.collections.ObservableList;
 import javafx.event.ActionEvent;
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
+import javafx.scene.Node;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
 import javafx.scene.control.cell.ComboBoxTableCell;
@@ -84,6 +85,10 @@ public class MainController {
     private final DataFormatter formatter = new DataFormatter();
     // Holds mapping of object → list of actions
     private Map<String, List<String>> actionsByObject;
+    private final Node rootIcon = makeIcon("/icons/bank.png", 16, 16);
+    private final Node suiteIcon = makeIcon("/icons/MainSuite.png", 16, 16);
+    private final Node subSuiteIcon = makeIcon("/icons/SubSuite.png", 16, 16);
+    private final Node testScenarioIcon = makeIcon("/icons/TestSuite.png", 16, 16);
 
 
     @FXML
@@ -112,10 +117,7 @@ public class MainController {
         ObservableList<TestStep> steps = FXCollections.observableArrayList();
 
         // Optionally seed with a sample TestCase
-        TestCase sample = TestExecutor.getTestByAction(
-                org.automonius.Actions.ActionLibrary.class,
-                "checkFileReadable"
-        );
+        TestCase sample = TestExecutor.getTestByAction(org.automonius.Actions.ActionLibrary.class, "checkFileReadable");
 
         if (sample != null) {
             steps.add(new TestStep(sample));  // clean and correct
@@ -167,18 +169,16 @@ public class MainController {
         inputColumn.setCellValueFactory(new PropertyValueFactory<>("input"));
 
 
-        itemColumn.setCellValueFactory(cellData ->
-                new
+        itemColumn.setCellValueFactory(cellData -> new
 
-                        ReadOnlyStringWrapper(String.valueOf(tableView.getItems().
+                ReadOnlyStringWrapper(String.valueOf(tableView.getItems().
 
-                        indexOf(cellData.getValue()) + 1))
-        );
+                indexOf(cellData.getValue()) + 1)));
 
         itemColumn.setEditable(false);
 
         rebuildArgumentColumns();
-
+//One
         itemColumn.setCellFactory(col -> new TableCell<TestStep, String>() {
             @Override
             protected void updateItem(String item, boolean empty) {
@@ -190,35 +190,83 @@ public class MainController {
 
         Map<String, List<String>> actionsByObject = TestExecutor.getActionsByObject(org.automonius.Actions.ActionLibrary.class);
         ObservableList<String> objectOptions = FXCollections.observableArrayList(actionsByObject.keySet());
+        // Item column (simple text cell)
+        itemColumn.setCellFactory(col -> new TableCell<TestStep, String>() {
+            @Override
+            protected void updateItem(String item, boolean empty) {
+                super.updateItem(item, empty);
+                setText(empty ? null : item);
+                setStyle("-fx-alignment: CENTER;"); // center horizontally
+            }
+        });
+
+// Object column (ComboBox bound to objectProperty)
+
+        objectColumn.setCellValueFactory(new PropertyValueFactory<>("object"));
+        objectColumn.setEditable(true);
         objectColumn.setCellFactory(col -> new TableCell<TestStep, String>() {
+            private final ComboBox<String> combo = new ComboBox<>(objectOptions);
+
+            {
+                setGraphic(combo);
+            }
+
             @Override
             protected void updateItem(String item, boolean empty) {
                 super.updateItem(item, empty);
 
-                if (empty || getTableRow() == null) {
+                if (empty || getTableRow() == null || getTableRow().getItem() == null) {
                     setGraphic(null);
                     return;
                 }
 
                 TestStep step = getTableRow().getItem();
-                if (step == null) {
+
+                combo.valueProperty().unbindBidirectional(step.objectProperty());
+                combo.valueProperty().bindBidirectional(step.objectProperty());
+
+                combo.valueProperty().addListener((obs, oldVal, newVal) -> {
+                    if (newVal != null) {
+                        List<String> methods = actionsByObject.getOrDefault(newVal, List.of());
+                        if (!methods.isEmpty()) {
+                            step.setAction(methods.get(0));
+                            rebuildArgumentColumns();
+                            updateColumnHeadersForAction();
+                        }
+                    }
+                });
+
+                setGraphic(combo);
+            }
+        });
+// Action column (ComboBox bound to actionProperty)
+        actionColumn.setCellValueFactory(new PropertyValueFactory<>("action"));
+        actionColumn.setEditable(true);
+        actionColumn.setCellFactory(col -> new TableCell<TestStep, String>() {
+            private final ComboBox<String> combo = new ComboBox<>();
+
+            {
+                setGraphic(combo);
+            }
+
+            @Override
+            protected void updateItem(String item, boolean empty) {
+                super.updateItem(item, empty);
+
+                if (empty || getTableRow() == null || getTableRow().getItem() == null) {
                     setGraphic(null);
                     return;
                 }
 
-                ComboBox<String> combo = new ComboBox<>(objectOptions);
-                combo.valueProperty().bindBidirectional(step.objectProperty());
+                TestStep step = getTableRow().getItem();
 
-                combo.valueProperty().addListener((obs, oldVal, newVal) -> {
-                    if (newVal == null) return;
+                // Update items based on current object
+                combo.setItems(FXCollections.observableArrayList(actionsByObject.getOrDefault(step.getObject(), List.of())));
 
-                    List<String> methods = actionsByObject.getOrDefault(newVal, List.of());
-                    if (methods.isEmpty()) return;
+                combo.valueProperty().unbindBidirectional(step.actionProperty());
+                combo.valueProperty().bindBidirectional(step.actionProperty());
 
-                    // Set default action
-                    step.setAction(methods.get(0));
-
-                    // 🔧 Trigger rebuild + update headers
+                combo.setOnAction(event -> {
                     rebuildArgumentColumns();
                     updateColumnHeadersForAction();
                 });
@@ -227,68 +275,21 @@ public class MainController {
             }
         });
 
-
-        actionColumn.setCellFactory(col -> new TableCell<TestStep, String>() {
-            @Override
-            protected void updateItem(String item, boolean empty) {
-                super.updateItem(item, empty);
-                if (empty || getTableRow() == null || getTableRow().getItem() == null) {
-                    setGraphic(null);
-                } else {
-                    TestStep step = getTableRow().getItem();
-
-                    ComboBox<String> combo = new ComboBox<>(
-                            FXCollections.observableArrayList(
-                                    actionsByObject.getOrDefault(step.getObject(), List.of())
-                            )
-                    );
-                    combo.valueProperty().bindBidirectional(step.actionProperty());
-
-                    combo.setOnAction(event -> {
-                        // 🔧 Trigger rebuild + update headers (no args now)
-                        rebuildArgumentColumns();
-                        updateColumnHeadersForAction(); // <-- fixed
-
-                        System.out.println("--- Action Selected ---");
-                        System.out.println("Action: " + step.getAction());
-                        System.out.println("Object: " + step.getObject());
-                        System.out.println("Description: " + step.getDescription());
-                        step.getExtras().forEach((k, v) -> {
-                            String value = v.get() == null ? "" : v.get();
-                            System.out.println("Args: " + k + "=" + value);
-                        });
-                        System.out.println("-----------------------");
-                    });
-
-                    setGraphic(combo);
-                }
-            }
-        });
-
-// 🔧 Replace old ensureArgumentColumns with rebuild + update
+// Optional: handle direct edit commits
         actionColumn.setOnEditCommit(event -> {
             TestStep step = event.getRowValue();
             step.setAction(event.getNewValue());
-
-            // 🔧 Trigger rebuild + update headers (no args now)
             rebuildArgumentColumns();
-            updateColumnHeadersForAction(); // <-- fixed
+            updateColumnHeadersForAction();
         });
-
-
+// Input column (drag & drop + click-to-edit dialog)
         inputColumn.setCellFactory(col -> new TableCell<TestStep, String>() {
-            @Override
-            protected void updateItem(String item, boolean empty) {
-                super.updateItem(item, empty);
-                setText(empty ? null : (item == null ? "" : item));
-            }
-
             {
-                // --- Drag & Drop support ---
+                // Drag & Drop support
                 setOnDragOver(event -> {
                     if (event.getGestureSource() != this && event.getDragboard().hasString()) {
                         event.acceptTransferModes(TransferMode.COPY);
-                        setStyle("-fx-background-color: lightgreen;"); // highlight when dragging over
+                        setStyle("-fx-background-color: lightgreen;");
                     }
                     event.consume();
                 });
@@ -300,17 +301,14 @@ public class MainController {
                     if (db.hasString()) {
                         String data = db.getString();
                         String[] parts = data.split("::", 2);
-                        String varName = parts[0];                 // e.g. variable name
-                        String varValue = parts.length > 1 ? parts[1] : ""; // e.g. path|keyword
+                        String varName = parts[0];
+                        String varValue = parts.length > 1 ? parts[1] : "";
 
                         TestStep step = getTableView().getItems().get(getIndex());
-                        step.setInput(varName);   // ✅ save variable name
-                        setText(varName);         // ✅ show variable name in cell
+                        step.setInput(varName);
 
-                        // 🔑 Map pipe-separated values into annotation-driven inputs
                         if (!varValue.isEmpty()) {
                             String[] values = varValue.split("\\|");
-
                             for (Method m : ActionLibrary.class.getDeclaredMethods()) {
                                 if (m.getName().equals(step.getAction()) && m.isAnnotationPresent(ActionMeta.class)) {
                                     ActionMeta meta = m.getAnnotation(ActionMeta.class);
@@ -321,10 +319,8 @@ public class MainController {
                                     break;
                                 }
                             }
-
                         }
 
-                        // 🔔 Pop-up shows the raw value
                         Alert alert = new Alert(Alert.AlertType.INFORMATION);
                         alert.setTitle("Variable Added");
                         alert.setHeaderText(null);
@@ -336,8 +332,7 @@ public class MainController {
                     event.consume();
                 });
 
-
-                // --- Click-to-edit dialog ---
+                // Click-to-edit dialog
                 setOnMouseClicked(event -> {
                     if (!isEmpty()) {
                         TestStep step = getTableView().getItems().get(getIndex());
@@ -356,58 +351,12 @@ public class MainController {
                         pane.setContent(editor);
                         pane.getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
 
-                        // Save on OK
                         dialog.setResultConverter(button -> {
                             if (button == ButtonType.OK) {
                                 return editor.getText();
                             }
                             return null;
                         });
-
-                        // Keyboard shortcuts
-                        Scene scene = pane.getScene();
-
-                        // Ctrl+S → save and close
-                        scene.getAccelerators().put(
-                                new KeyCodeCombination(KeyCode.S, KeyCombination.CONTROL_DOWN),
-                                () -> {
-                                    step.setInput(editor.getText());
-                                    dialog.setResult(editor.getText());
-                                    dialog.close();
-                                }
-                        );
-
-                        // Ctrl+/ → comment/uncomment JSON or XML
-                        scene.getAccelerators().put(
-                                new KeyCodeCombination(KeyCode.SLASH, KeyCombination.CONTROL_DOWN),
-                                () -> {
-                                    IndexRange selection = editor.getSelection();
-                                    if (selection.getLength() > 0) {
-                                        String selectedText = editor.getText(selection.getStart(), selection.getEnd());
-                                        StringBuilder sb = new StringBuilder();
-
-                                        boolean isXml = selectedText.trim().startsWith("<");
-                                        String[] lines = selectedText.split("\n");
-
-                                        if (isXml) {
-                                            if (selectedText.trim().startsWith("<!--")) {
-                                                sb.append(selectedText.replaceAll("<!--", "").replaceAll("-->", ""));
-                                            } else {
-                                                sb.append("<!--\n").append(selectedText).append("\n-->");
-                                            }
-                                        } else {
-                                            for (String line : lines) {
-                                                if (line.trim().startsWith("//")) {
-                                                    sb.append(line.replaceFirst("// ?", "")).append("\n");
-                                                } else {
-                                                    sb.append("// ").append(line).append("\n");
-                                                }
-                                            }
-                                        }
-                                        editor.replaceText(selection, sb.toString());
-                                    }
-                                }
-                        );
 
                         dialog.showAndWait().ifPresent(result -> {
                             if (result != null) {
@@ -416,6 +365,16 @@ public class MainController {
                         });
                     }
                 });
+            }
+
+            @Override
+            protected void updateItem(String item, boolean empty) {
+                super.updateItem(item, empty);
+                if (empty || getTableRow() == null || getTableRow().getItem() == null) {
+                    setText(null);
+                } else {
+                    setText(item == null ? "" : item);
+                }
             }
         });
 
@@ -445,26 +404,22 @@ public class MainController {
                         setGraphic(null);
                     } else {
                         setText(item.getName());
-//                        setGraphic(null);
-                        // Choose icon based on type
+
+                        // ✅ Use cached icons instead of recreating each time
                         switch (item.getType()) {
-                            case ROOT:
-                                setGraphic(makeIcon("/icons/bank.png", 16, 16));
-                                break;
-                            case SUITE:
-                                setGraphic(makeIcon("/icons/MainSuite.png", 16, 16));
-                                break;
-                            case SUB_SUITE:
-                                setGraphic(makeIcon("/icons/SubSuite.png", 16, 16));
-                                break;
-                            case TEST_SCENARIO:
-                                setGraphic(makeIcon("/icons/TestSuite.png", 16, 16));
-                                break;
+                            case ROOT -> setGraphic(rootIcon);
+                            case SUITE -> setGraphic(suiteIcon);
+                            case SUB_SUITE -> setGraphic(subSuiteIcon);
+                            case TEST_SCENARIO -> setGraphic(testScenarioIcon);
+                            default -> setGraphic(null);
                         }
                     }
-                    setStyle(""); // reset style
+
+                    // Optional: reset style only if you need to clear custom styles
+                    setStyle("");
                 }
             };
+
 
             // ✅ Double‑click to rename
             cell.setOnMouseClicked(event -> {
@@ -558,12 +513,7 @@ public class MainController {
                                     List<TestStep> rebuiltSteps = new ArrayList<>();
                                     for (JsonElement el : json.getAsJsonArray("steps")) {
                                         JsonObject s = el.getAsJsonObject();
-                                        TestStep step = new TestStep(
-                                                s.get("item").getAsString(),
-                                                s.get("action").getAsString(),
-                                                s.get("object").getAsString(),
-                                                s.get("input").getAsString()
-                                        );
+                                        TestStep step = new TestStep(s.get("item").getAsString(), s.get("action").getAsString(), s.get("object").getAsString(), s.get("input").getAsString());
                                         step.setDescription(s.get("description").getAsString());
 
                                         JsonObject extras = s.getAsJsonObject("extras");
@@ -597,8 +547,7 @@ public class MainController {
                                     target.getChildren().add(newNode);
 
                                     if (copiedType == NodeType.TEST_SCENARIO) {
-                                        scenarioSteps.put(makeKey(newNode),
-                                                new ArrayList<>(List.of(new TestStep("", "", "", ""))));
+                                        scenarioSteps.put(makeKey(newNode), new ArrayList<>(List.of(new TestStep("", "", "", ""))));
                                         scenarioColumns.put(makeKey(newNode), new ArrayList<>());
                                     }
                                 } else {
@@ -628,8 +577,7 @@ public class MainController {
             // Drag over
             cell.setOnDragOver(event -> {
                 if (event.getGestureSource() != cell && !cell.isEmpty()) {
-                    TreeItem<TestNode> draggedItem = findItem(treeView.getRoot(),
-                            ((TreeCell<TestNode>) event.getGestureSource()).getItem().getName());
+                    TreeItem<TestNode> draggedItem = findItem(treeView.getRoot(), ((TreeCell<TestNode>) event.getGestureSource()).getItem().getName());
                     TreeItem<TestNode> targetItem = cell.getTreeItem();
 
                     if (isValidDrop(draggedItem, targetItem)) {
@@ -674,8 +622,7 @@ public class MainController {
 
                         success = true;
                     } else {
-                        showError("Invalid drop target for " +
-                                (draggedItem != null ? draggedItem.getValue().getName() : ""));
+                        showError("Invalid drop target for " + (draggedItem != null ? draggedItem.getValue().getName() : ""));
                     }
                 }
                 event.setDropCompleted(success);
@@ -806,11 +753,7 @@ public class MainController {
             if (selectedStep != null) {
                 ClipboardContent content = new ClipboardContent();
                 StringBuilder sb = new StringBuilder();
-                sb.append(selectedStep.getItem()).append("|")
-                        .append(selectedStep.getAction()).append("|")
-                        .append(selectedStep.getObject()).append("|")
-                        .append(selectedStep.getInput()).append("|")
-                        .append(selectedStep.getDescription());
+                sb.append(selectedStep.getItem()).append("|").append(selectedStep.getAction()).append("|").append(selectedStep.getObject()).append("|").append(selectedStep.getInput()).append("|").append(selectedStep.getDescription());
                 selectedStep.getExtras().forEach((k, v) -> sb.append("|").append(k).append("=").append(v.get()));
                 content.putString(sb.toString());
                 Clipboard.getSystemClipboard().setContent(content);
@@ -876,8 +819,7 @@ public class MainController {
     @FXML
     private void handleNewTestScenario(ActionEvent event) {
         TreeItem<TestNode> selected = treeView.getSelectionModel().getSelectedItem();
-        if (selected != null &&
-                (selected.getValue().getType() == NodeType.SUITE || selected.getValue().getType() == NodeType.SUB_SUITE)) {
+        if (selected != null && (selected.getValue().getType() == NodeType.SUITE || selected.getValue().getType() == NodeType.SUB_SUITE)) {
 
             TextInputDialog dialog = new TextInputDialog("TestSuite");
             dialog.setTitle("New TestSuite");
@@ -886,9 +828,7 @@ public class MainController {
 
             dialog.showAndWait().ifPresent(name -> {
                 if (!name.trim().isEmpty()) {
-                    TreeItem<TestNode> testScenario = new TreeItem<>(
-                            new TestNode(name.trim(), NodeType.TEST_SCENARIO)
-                    );
+                    TreeItem<TestNode> testScenario = new TreeItem<>(new TestNode(name.trim(), NodeType.TEST_SCENARIO));
                     selected.getChildren().add(testScenario);
 
                     // ✅ Seed with one truly blank row (nulls, not "")
@@ -936,10 +876,7 @@ public class MainController {
         List<TestStep> copy = new ArrayList<>();
         int rowNum = 1;
         for (TestStep step : tableView.getItems()) {
-            TestStep clone = new TestStep(String.valueOf(rowNum++),
-                    step.getAction(),
-                    step.getObject(),
-                    step.getInput());
+            TestStep clone = new TestStep(String.valueOf(rowNum++), step.getAction(), step.getObject(), step.getInput());
             clone.setDescription(step.getDescription());
 
             // Copy extras
@@ -974,9 +911,7 @@ public class MainController {
         // --- Re‑apply factories for all base columns ---
 
         // Item column (read‑only index)
-        itemColumn.setCellValueFactory(cellData ->
-                new ReadOnlyStringWrapper(String.valueOf(tableView.getItems().indexOf(cellData.getValue()) + 1))
-        );
+        itemColumn.setCellValueFactory(cellData -> new ReadOnlyStringWrapper(String.valueOf(tableView.getItems().indexOf(cellData.getValue()) + 1)));
         itemColumn.setEditable(false);
 
         // Description column (editable text)
@@ -992,16 +927,30 @@ public class MainController {
         objectColumn.setCellValueFactory(new PropertyValueFactory<>("object"));
         objectColumn.setEditable(true);
         objectColumn.setCellFactory(col -> new TableCell<TestStep, String>() {
+            private final ComboBox<String> combo = new ComboBox<>();
+
+            {
+                setGraphic(combo);
+            }
+
             @Override
             protected void updateItem(String item, boolean empty) {
                 super.updateItem(item, empty);
+
                 if (empty || getTableRow() == null || getTableRow().getItem() == null) {
                     setGraphic(null);
                     return;
                 }
+
                 TestStep step = getTableRow().getItem();
-                ComboBox<String> combo = new ComboBox<>(FXCollections.observableArrayList(actionsByObject.keySet()));
+
+                // ✅ Update items list once per refresh
+                combo.setItems(FXCollections.observableArrayList(actionsByObject.keySet()));
+
+                // ✅ Rebind to this step’s object property
+                combo.valueProperty().unbindBidirectional(step.objectProperty());
                 combo.valueProperty().bindBidirectional(step.objectProperty());
+
                 combo.valueProperty().addListener((obs, oldVal, newVal) -> {
                     if (newVal != null) {
                         List<String> methods = actionsByObject.getOrDefault(newVal, List.of());
@@ -1012,33 +961,49 @@ public class MainController {
                         }
                     }
                 });
+
                 setGraphic(combo);
             }
         });
+
 
         // Action column (editable via ComboBox)
         actionColumn.setCellValueFactory(new PropertyValueFactory<>("action"));
         actionColumn.setEditable(true);
         actionColumn.setCellFactory(col -> new TableCell<TestStep, String>() {
+            private final ComboBox<String> combo = new ComboBox<>();
+
+            {
+                setGraphic(combo);
+            }
+
             @Override
             protected void updateItem(String item, boolean empty) {
                 super.updateItem(item, empty);
+
                 if (empty || getTableRow() == null || getTableRow().getItem() == null) {
                     setGraphic(null);
                     return;
                 }
+
                 TestStep step = getTableRow().getItem();
-                ComboBox<String> combo = new ComboBox<>(FXCollections.observableArrayList(
-                        actionsByObject.getOrDefault(step.getObject(), List.of())
-                ));
+
+                // ✅ Update items based on current object
+                combo.setItems(FXCollections.observableArrayList(actionsByObject.getOrDefault(step.getObject(), List.of())));
+
+                // ✅ Rebind to this step’s action property
+                combo.valueProperty().unbindBidirectional(step.actionProperty());
                 combo.valueProperty().bindBidirectional(step.actionProperty());
+
                 combo.setOnAction(event -> {
                     rebuildArgumentColumns();
                     updateColumnHeadersForAction();
                 });
+
                 setGraphic(combo);
             }
         });
+
 
         // --- Rebuild ArgN columns consistently ---
         rebuildArgumentColumns();
@@ -1048,8 +1013,7 @@ public class MainController {
         for (int i = 0; i < tableView.getColumns().size(); i++) {
             TableColumn<TestStep, ?> baseCol = tableView.getColumns().get(i);
             if ("Dynamic".equals(baseCol.getUserData())) {
-                @SuppressWarnings("unchecked")
-                TableColumn<TestStep, String> col = (TableColumn<TestStep, String>) baseCol;
+                @SuppressWarnings("unchecked") TableColumn<TestStep, String> col = (TableColumn<TestStep, String>) baseCol;
                 final int colIndex = i - 5; // offset after base columns
                 final String extraName = (colIndex >= 0 && colIndex < extras.size()) ? extras.get(colIndex) : null;
 
@@ -1151,8 +1115,7 @@ public class MainController {
         String key = makeKey(scenario);
 
         // 🔑 Prevent duplicates
-        boolean exists = tableView.getColumns().stream()
-                .anyMatch(c -> c.getText().equals(colName));
+        boolean exists = tableView.getColumns().stream().anyMatch(c -> c.getText().equals(colName));
         if (exists) return;
 
         TableColumn<TestStep, String> extraColumn = new TableColumn<>(colName);
@@ -1170,9 +1133,7 @@ public class MainController {
     }
 
     private void clearArgumentColumns() {
-        tableView.getColumns().removeIf(c ->
-                scenarioColumns.values().stream().anyMatch(cols -> cols.contains(c.getText()))
-        );
+        tableView.getColumns().removeIf(c -> scenarioColumns.values().stream().anyMatch(cols -> cols.contains(c.getText())));
     }
 
 
@@ -1303,11 +1264,8 @@ public class MainController {
             tableView.edit(-1, null); // forces commit of current edit
         }
 
-        // Run the selected row in the table
         TestStep step = tableView.getSelectionModel().getSelectedItem();
-
         if (step == null) {
-            // ✅ Show popup only when no step is selected
             Alert alert = new Alert(Alert.AlertType.WARNING);
             alert.setTitle("Run Test");
             alert.setHeaderText(null);
@@ -1316,10 +1274,14 @@ public class MainController {
             return;
         }
 
-        // Run directly from the TestStep
-        Object resultObj = TestExecutor.runTest(step);
+        // 🔎 Debug: show annotation names vs extras map
+        String[] inputs = Arrays.stream(ActionLibrary.class.getDeclaredMethods()).filter(m -> m.isAnnotationPresent(ActionMeta.class)).filter(m -> m.getName().equals(step.getAction())).findFirst().map(m -> m.getAnnotation(ActionMeta.class).inputs()).orElse(new String[0]);
 
-        // ✅ Log actual result to terminal only, no popup
+        System.out.println("Annotation input names: " + Arrays.toString(inputs));
+        System.out.println("Extras map: " + step.getExtras());
+
+        // Run the step
+        Object resultObj = TestExecutor.runTest(step);
         System.out.println("Final Result: " + resultObj);
     }
 
@@ -1329,8 +1291,7 @@ public class MainController {
             if (method.isAnnotationPresent(ActionMeta.class)) {
                 ActionMeta meta = method.getAnnotation(ActionMeta.class);
                 if (method.getName().equals(actionName)) {
-                    return new TestCase(meta.objectName(), method.getName(),
-                            meta.description(), String.join(",", meta.inputs()));
+                    return new TestCase(meta.objectName(), method.getName(), meta.description(), String.join(",", meta.inputs()));
                 }
             }
         }
@@ -1423,8 +1384,7 @@ public class MainController {
                 TreeItem<TestNode> scenario = treeView.getSelectionModel().getSelectedItem();
                 if (scenario != null && scenario.getValue().getType() == NodeType.TEST_SCENARIO) {
                     for (String inputName : meta.inputs()) {
-                        boolean exists = tableView.getColumns().stream()
-                                .anyMatch(c -> c.getText().equals(inputName));
+                        boolean exists = tableView.getColumns().stream().anyMatch(c -> c.getText().equals(inputName));
                         if (!exists) {
                             addColumnForScenario(scenario, inputName);
                         }
@@ -1437,8 +1397,10 @@ public class MainController {
 
     private void rebuildArgumentColumns() {
         tableView.setEditable(true);
+        // Remove old dynamic columns
         tableView.getColumns().removeIf(c -> "Dynamic".equals(c.getUserData()));
 
+        // Find max number of inputs across all actions
         int maxInputs = Arrays.stream(ActionLibrary.class.getDeclaredMethods())
                 .filter(m -> m.isAnnotationPresent(ActionMeta.class))
                 .mapToInt(m -> m.getAnnotation(ActionMeta.class).inputs().length)
@@ -1451,6 +1413,7 @@ public class MainController {
             col.setUserData("Dynamic");
             col.setEditable(true);
 
+            // Bind to extras property if available
             col.setCellValueFactory(cellData -> {
                 TestStep step = cellData.getValue();
                 if (step == null || step.getAction() == null || step.getAction().isBlank()) {
@@ -1459,19 +1422,19 @@ public class MainController {
                 String[] inputs = getInputsForAction(step.getAction());
                 if (colIndex < inputs.length) {
                     return step.getExtraProperty(inputs[colIndex]);
-                } else {
-                    return new ReadOnlyStringWrapper("");
                 }
+                return new ReadOnlyStringWrapper("");
             });
 
-            col.setCellFactory(tc -> new TableCell<TestStep, String>() {
+            // Custom cell with floating label + text field
+            col.setCellFactory(tc -> new TableCell<>() {
                 private final TextField textField = new TextField();
                 private final Label floatingLabel = new Label();
                 private final StackPane stack = new StackPane();
 
                 {
                     floatingLabel.getStyleClass().add("floating-label");
-                    floatingLabel.setMouseTransparent(true); // ✅ label won’t block clicks
+                    floatingLabel.setMouseTransparent(true);
                     textField.getStyleClass().add("arg-text-field");
 
                     stack.getChildren().addAll(floatingLabel, textField);
@@ -1482,21 +1445,17 @@ public class MainController {
                         if (!newVal) commitEdit(textField.getText());
                     });
 
-                    textField.textProperty().addListener((obs, oldVal, newVal) -> {
-                        updateLabelState(newVal, textField.isFocused());
-                    });
-                    textField.focusedProperty().addListener((obs, oldVal, newVal) -> {
-                        updateLabelState(textField.getText(), newVal);
-                    });
+                    textField.textProperty().addListener((obs, oldVal, newVal) ->
+                            updateLabelState(newVal, textField.isFocused()));
+                    textField.focusedProperty().addListener((obs, oldVal, newVal) ->
+                            updateLabelState(textField.getText(), newVal));
                 }
 
                 private void updateLabelState(String text, boolean focused) {
                     if ((text == null || text.isBlank()) && !focused) {
                         floatingLabel.getStyleClass().remove("floated");
-                    } else {
-                        if (!floatingLabel.getStyleClass().contains("floated")) {
-                            floatingLabel.getStyleClass().add("floated");
-                        }
+                    } else if (!floatingLabel.getStyleClass().contains("floated")) {
+                        floatingLabel.getStyleClass().add("floated");
                     }
                 }
 
@@ -1532,8 +1491,15 @@ public class MainController {
 
                     String[] inputs = getInputsForAction(step.getAction());
                     if (colIndex < inputs.length) {
-                        floatingLabel.setText(inputs[colIndex]);
+                        String key = inputs[colIndex];
+                        floatingLabel.setText(key);
                         textField.setDisable(false);
+
+                        // Bind text field directly to extras property
+                        SimpleStringProperty prop = step.getExtraProperty(key);
+                        textField.textProperty().unbindBidirectional(prop);
+                        textField.textProperty().bindBidirectional(prop);
+
                         textField.setText(item);
                         updateLabelState(item, textField.isFocused());
                     } else {
@@ -1544,13 +1510,17 @@ public class MainController {
                 }
             });
 
-            // ✅ Annotation-driven commit
+            // Commit handler: store under annotation-driven key
             col.setOnEditCommit(event -> {
                 TestStep step = event.getRowValue();
                 if (step == null || step.getAction() == null || step.getAction().isBlank()) return;
+
                 String[] inputs = getInputsForAction(step.getAction());
                 if (colIndex < inputs.length) {
-                    step.setExtra(inputs[colIndex], event.getNewValue());
+                    String key = inputs[colIndex];
+                    String value = event.getNewValue();
+                    step.setExtra(key, value);
+                    System.out.println("Committed: " + key + "=" + value);
                 }
             });
 
@@ -1561,22 +1531,14 @@ public class MainController {
 
 
     private String[] getInputsForAction(String actionName) {
-        return Arrays.stream(ActionLibrary.class.getDeclaredMethods())
-                .filter(m -> m.isAnnotationPresent(ActionMeta.class))
-                .filter(m -> m.getName().equals(actionName))
-                .findFirst()
-                .map(m -> m.getAnnotation(ActionMeta.class).inputs())
-                .orElse(new String[0]);
+        return Arrays.stream(ActionLibrary.class.getDeclaredMethods()).filter(m -> m.isAnnotationPresent(ActionMeta.class)).filter(m -> m.getName().equals(actionName)).findFirst().map(m -> m.getAnnotation(ActionMeta.class).inputs()).orElse(new String[0]);
     }
 
     private void updateColumnHeadersForAction() {
-        List<TableColumn<TestStep, ?>> dynamicCols = tableView.getColumns().stream()
-                .filter(c -> "Dynamic".equals(c.getUserData()))
-                .toList();
+        List<TableColumn<TestStep, ?>> dynamicCols = tableView.getColumns().stream().filter(c -> "Dynamic".equals(c.getUserData())).toList();
 
         for (int i = 0; i < dynamicCols.size(); i++) {
-            @SuppressWarnings("unchecked")
-            TableColumn<TestStep, String> col = (TableColumn<TestStep, String>) dynamicCols.get(i);
+            @SuppressWarnings("unchecked") TableColumn<TestStep, String> col = (TableColumn<TestStep, String>) dynamicCols.get(i);
             col.setText("Arg" + (i + 1)); // ✅ stable header only
         }
     }
