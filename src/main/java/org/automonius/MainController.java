@@ -1198,19 +1198,24 @@ public class MainController {
     private void handleRun(ActionEvent event) {
         // Run the selected row in the table
         TestStep step = tableView.getSelectionModel().getSelectedItem();
+
         if (step == null) {
-            System.out.println("⚠️ No step selected to run.");
+            // ✅ Show popup only when no step is selected
+            Alert alert = new Alert(Alert.AlertType.WARNING);
+            alert.setTitle("Run Test");
+            alert.setHeaderText(null);
+            alert.setContentText("⚠️ No step selected to run.");
+            alert.show();
             return;
         }
 
         // Run directly from the TestStep
         Object resultObj = TestExecutor.runTest(step);
-        boolean result = resultObj instanceof Boolean && (Boolean) resultObj;
 
-        // Optional: final confirmation line
+        // ✅ Log result to terminal only, no popup
+        boolean result = resultObj instanceof Boolean && (Boolean) resultObj;
         System.out.println("Final Result: " + result);
     }
-
 
 
     public static TestCase getTestByAction(Class<?> clazz, String actionName) {

@@ -1,5 +1,7 @@
 package org.automonius.exec;
 
+import javafx.application.Platform;
+import javafx.scene.control.Alert;
 import org.automonius.Actions.ActionLibrary;
 import org.automonius.Annotations.ActionMeta;
 import org.automonius.TestStep;
@@ -70,10 +72,16 @@ public class TestExecutor {
                         args.add(step.getExtra(name));
                     }
 
+                    // Guard: skip if any required argument is missing or blank
+                    if (args.stream().anyMatch(a -> a == null || a.isBlank())) {
+                        System.out.println("⚠️ Skipped execution: arguments not yet provided");
+                        return null;
+                    }
+
                     // Validate argument count
                     if (args.size() != paramCount) {
-                        throw new IllegalArgumentException("Expected " + paramCount +
-                                " args, got " + args.size());
+                        System.out.println("⚠️ Expected " + paramCount + " args, got " + args.size());
+                        return null;
                     }
 
                     // Convert String args to match parameter types
@@ -95,7 +103,7 @@ public class TestExecutor {
                     // Invoke the method
                     Object result = method.invoke(null, convertedArgs);
 
-                    // ✅ Clean, consistent logging
+                    // ✅ Log execution details to terminal only
                     System.out.println("=== Test Execution ===");
                     System.out.println("Action: " + step.getAction());
                     System.out.println("Object: " + step.getObject());
@@ -114,7 +122,7 @@ public class TestExecutor {
                 }
             }
         } catch (Exception e) {
-            System.err.println("Error running action: " + step.getAction());
+            System.out.println("⚠️ Error running action: " + (step != null ? step.getAction() : "unknown"));
             e.printStackTrace();
         }
         return null;
