@@ -1,7 +1,5 @@
 package org.automonius.exec;
 
-import javafx.application.Platform;
-import javafx.scene.control.Alert;
 import org.automonius.Actions.ActionLibrary;
 import org.automonius.Annotations.ActionMeta;
 import org.automonius.TestStep;
@@ -43,7 +41,7 @@ public class TestExecutor {
                 }
             }
         }
-        return null; // not found }
+        return null; // not found
     }
 
     public static Map<String, List<String>> getActionsByObject(Class<?> clazz) {
@@ -93,6 +91,12 @@ public class TestExecutor {
 
                         if (targetType == int.class || targetType == Integer.class) {
                             convertedArgs[i] = (raw == null || raw.isEmpty()) ? 0 : Integer.parseInt(raw);
+                        } else if (targetType == double.class || targetType == Double.class) {
+                            convertedArgs[i] = (raw == null || raw.isEmpty()) ? 0.0 : Double.parseDouble(raw);
+                        } else if (targetType == long.class || targetType == Long.class) {
+                            convertedArgs[i] = (raw == null || raw.isEmpty()) ? 0L : Long.parseLong(raw);
+                        } else if (targetType == float.class || targetType == Float.class) {
+                            convertedArgs[i] = (raw == null || raw.isEmpty()) ? 0f : Float.parseFloat(raw);
                         } else if (targetType == boolean.class || targetType == Boolean.class) {
                             convertedArgs[i] = (raw != null && Boolean.parseBoolean(raw));
                         } else {
@@ -127,8 +131,4 @@ public class TestExecutor {
         }
         return null;
     }
-
-
-
-
 }

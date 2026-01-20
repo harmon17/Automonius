@@ -1212,10 +1212,10 @@ public class MainController {
         // Run directly from the TestStep
         Object resultObj = TestExecutor.runTest(step);
 
-        // ✅ Log result to terminal only, no popup
-        boolean result = resultObj instanceof Boolean && (Boolean) resultObj;
-        System.out.println("Final Result: " + result);
+        // ✅ Log actual result to terminal only, no popup
+        System.out.println("Final Result: " + resultObj);
     }
+
 
 
     public static TestCase getTestByAction(Class<?> clazz, String actionName) {
