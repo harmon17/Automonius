@@ -23,8 +23,9 @@ public class TestExecutor {
                         meta.objectName(),
                         method.getName(),
                         meta.description(),
-                        String.join(",", meta.inputs())
+                        Arrays.asList(meta.inputs()) // ✅ pass as list
                 );
+
 
                 grouped.computeIfAbsent(meta.objectName(), k -> new ArrayList<>()).add(tc);
             }
@@ -37,7 +38,13 @@ public class TestExecutor {
             if (method.isAnnotationPresent(ActionMeta.class)) {
                 ActionMeta meta = method.getAnnotation(ActionMeta.class);
                 if (method.getName().equals(actionName)) {
-                    return new TestCase(meta.objectName(), method.getName(), meta.description(), String.join(",", meta.inputs()));
+                    return new TestCase(
+                            meta.objectName(),
+                            method.getName(),
+                            meta.description(),
+                            Arrays.asList(meta.inputs())
+                    );
+
                 }
             }
         }

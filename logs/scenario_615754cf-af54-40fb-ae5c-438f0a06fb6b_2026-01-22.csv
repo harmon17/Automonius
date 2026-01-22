@@ -1,0 +1,6 @@
+phase,timestamp,row,stepId,item,object,action,description,input,args,maxArgs
+Load,2026-01-22T20:25:30.780123900,1,"72c22c51-790e-4d87-a350-040c4254e60b","<empty>","<empty>","<empty>","<empty>","<empty>","[]",1
+Load,2026-01-22T20:25:34.363950800,1,"94550191-5b16-4a12-9247-fce08c683c6e","<empty>","<empty>","<empty>","<empty>","<empty>","[]",1
+Load,2026-01-22T20:25:34.363950800,2,"cd06c84a-7d3f-4451-94b1-56657a92dc33","<empty>","<empty>","<empty>","<empty>","<empty>","[]",0
+Load,2026-01-22T20:25:34.363950800,3,"f8f14ba9-150f-4ea6-ad1f-8e43eb952eea","<empty>","<empty>","<empty>","<empty>","<empty>","[]",0
+Load,2026-01-22T20:25:34.363950800,4,"1a21c4bd-02a6-4f56-84dc-a9d783579d7b","<empty>","<empty>","<empty>","<empty>","<empty>","[]",0

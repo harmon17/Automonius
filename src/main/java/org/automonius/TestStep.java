@@ -1,30 +1,37 @@
 package org.automonius;
 
 import javafx.beans.property.SimpleStringProperty;
-import org.automonius.exec.TestCase;   // ✅ import TestCase
+import org.automonius.exec.TestCase;
 import java.util.*;
 
 /**
  * Represents a single test step row in the TableView.
- * - input: stores the variable name reference (e.g. gdsfs335f).
+ * - input: stores the primary variable name reference (first argument).
  * - extras: stores dynamic argument values (Arg1, Arg2, ...).
+ * - maxArgs: tracks the maximum number of arguments defined for this step.
  */
 public class TestStep {
+    private final String id;  // unique identifier for this step
+
     private final SimpleStringProperty item;
     private final SimpleStringProperty action;
     private final SimpleStringProperty object;
-    private final SimpleStringProperty input;        // variable name reference
+    private final SimpleStringProperty input;
     private final SimpleStringProperty description;
 
-    // Dynamic extras (argument columns and other metadata)
     private final Map<String, SimpleStringProperty> extras = new HashMap<>();
 
-    // Default constructor for blank rows
+    // --- NEW FIELD ---
+    private int maxArgs = 0;
+
+    // Default constructor
     public TestStep() {
         this("", "", "", "");
     }
 
+    // Main constructor
     public TestStep(String item, String action, String object, String input) {
+        this.id = UUID.randomUUID().toString();   // assign unique ID
         this.item = new SimpleStringProperty(item == null ? "" : item);
         this.action = new SimpleStringProperty(action == null ? "" : action);
         this.object = new SimpleStringProperty(object == null ? "" : object);
@@ -32,17 +39,49 @@ public class TestStep {
         this.description = new SimpleStringProperty("");
     }
 
-    // ✅ New convenience constructor for TestCase
+    // Convenience constructor for TestCase
     public TestStep(TestCase tc) {
-        this("", tc.getActionName(), tc.getObjectName(), tc.getInput());
+        this(
+                "",
+                tc.getActionName(),
+                tc.getObjectName(),
+                tc.getInputs().isEmpty() ? "" : tc.getInputs().get(0) // first input only
+        );
         this.setDescription(tc.getDescription());
+
+        // Populate extras with all input names
+        for (String arg : tc.getInputs()) {
+            this.setExtra(arg, "");
+        }
+
+        // Set maxArgs from TestCase inputs
+        this.maxArgs = tc.getInputs().size();
+    }
+
+    // Copy constructor
+    public TestStep(TestStep original) {
+        this(original.getItem(), original.getAction(), original.getObject(), original.getInput());
+        this.setDescription(original.getDescription());
+        this.maxArgs = original.getMaxArgs();
+
+        // Deep copy extras
+        if (original.getExtras() != null) {
+            original.getExtras().forEach((k, v) ->
+                    this.extras.put(k, new SimpleStringProperty(v.get()))
+            );
+        }
+    }
+
+    // --- New getter ---
+    public String getId() {
+        return id;
     }
 
     // --- Getters ---
     public String getItem() { return item.get(); }
     public String getAction() { return action.get(); }
     public String getObject() { return object.get(); }
-    public String getInput() { return input.get(); }          // variable name
+    public String getInput() { return input.get(); }          // primary variable
     public String getDescription() { return description.get(); }
 
     // --- Setters ---
@@ -83,7 +122,7 @@ public class TestStep {
         }
     }
 
-// Spread a pipe-separated string into annotation-driven extras
+    // Spread a pipe-separated string into annotation-driven extras
     public void setJoinedArguments(String joined, String[] inputNames) {
         if (joined == null || joined.isEmpty() || inputNames == null) return;
         String[] parts = joined.split("\\|");
@@ -102,4 +141,32 @@ public class TestStep {
         return String.join("|", values);
     }
 
+    // --- New methods for logging ---
+    public List<String> getArgs() {
+        return extras.values().stream()
+                .map(SimpleStringProperty::get)
+                .toList();
+    }
+
+    // --- MaxArgs accessors ---
+    public int getMaxArgs() {
+        return maxArgs;
+    }
+
+    public void setMaxArgs(int maxArgs) {
+        this.maxArgs = maxArgs;
+    }
+
+    @Override
+    public String toString() {
+        return "TestStep{" +
+                "item=" + getItem() +
+                ", action=" + getAction() +
+                ", object=" + getObject() +
+                ", input=" + getInput() +
+                ", description=" + getDescription() +
+                ", maxArgs=" + maxArgs +
+                ", extras=" + extras +
+                '}';
+    }
 }

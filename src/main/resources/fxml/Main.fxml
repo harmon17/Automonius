@@ -81,6 +81,9 @@
                 <!-- Suite TreeView -->
                 <TreeView fx:id="treeView"/>
 
+                <!-- Toggle: Show steps in tree -->
+                <CheckBox fx:id="showStepsToggle" text="Show steps in tree" selected="false"/>
+
                 <!-- Environment + Entity box -->
                 <VBox spacing="6" styleClass="environment-box">
                     <children>
@@ -184,8 +187,7 @@
                 <!-- NEW: Execution Preview -->
                 <TitledPane text="Execution Preview" expanded="false" styleClass="execution-preview-box">
                     <content>
-                        <TextArea fx:id="executionPreviewArea" editable="false" wrapText="true"
-                                  text="Preview: Running Japan in Test environment..."/>
+                        <TextArea fx:id="executionPreviewArea" editable="false" wrapText="true"/>
                     </content>
                 </TitledPane>
 
