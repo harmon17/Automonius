@@ -150,10 +150,6 @@ public class MainController {
                         .collect(Collectors.toMap(arg -> arg, arg -> "")));
                 blank.setMaxArgs(defaultArgs.size());
 
-                // Build dynamic columns immediately
-                rebuildArgumentColumns(defaultArgs);
-                tableView.refresh();
-
                 log.info("Initialized with default object=" + defaultObject +
                         ", action=" + defaultAction +
                         ", args=" + defaultArgs);
@@ -222,12 +218,6 @@ public class MainController {
                                         .map(TestStep::new)
                                         .toList()));
                         scenarioColumns.put(scenario.getId(), List.of());
-
-                        // ✅ If this scenario is immediately selected, rebuild its columns
-                        if (treeView.getSelectionModel().getSelectedItem() != null &&
-                                treeView.getSelectionModel().getSelectedItem().getValue().getScenarioRef() == scenario) {
-                            rebuildArgumentColumns(scenarioColumns.getOrDefault(scenario.getId(), List.of()));
-                        }
                     }
 
                     updateExecutionPreview("Copied suite: " + copy.getName() +
@@ -252,12 +242,6 @@ public class MainController {
                                     .map(TestStep::new)
                                     .toList()));
                     scenarioColumns.put(copy.getId(), List.of());
-
-                    // ✅ If this copied scenario is immediately selected, rebuild its columns
-                    if (treeView.getSelectionModel().getSelectedItem() != null &&
-                            treeView.getSelectionModel().getSelectedItem().getValue().getScenarioRef() == copy) {
-                        rebuildArgumentColumns(scenarioColumns.getOrDefault(copy.getId(), List.of()));
-                    }
 
                     updateExecutionPreview("Copied scenario: " + copy.getName() +
                             " (id=" + copy.getId() + ")");
@@ -476,13 +460,6 @@ public class MainController {
                     TreeItem<TestNode> firstScenarioItem = firstSuite.getChildren().get(0);
                     treeView.getSelectionModel().select(firstScenarioItem);
                     treeView.getFocusModel().focus(treeView.getRow(firstScenarioItem));
-
-                    // ✅ Rebuild dynamic columns for the first scenario
-                    TestScenario firstScenario = firstScenarioItem.getValue().getScenarioRef();
-                    if (firstScenario != null) {
-                        List<String> cols = scenarioColumns.getOrDefault(firstScenario.getId(), List.of());
-                        rebuildArgumentColumns(cols);
-                    }
                 }
             }
         });
@@ -555,8 +532,14 @@ public class MainController {
                         step.setExtras(restoredArgs.stream().collect(Collectors.toMap(arg -> arg, arg -> "")));
                         step.setMaxArgs(restoredArgs.size());
 
-                        // Rebuild dynamic columns immediately
-                        rebuildArgumentColumns(restoredArgs);
+                        // ✅ Persist headers for current scenario
+                        TreeItem<TestNode> selectedScenario = treeView.getSelectionModel().getSelectedItem();
+                        if (selectedScenario != null && selectedScenario.getValue().getScenarioRef() != null) {
+                            String scenarioId = selectedScenario.getValue().getScenarioRef().getId();
+                            scenarioColumns.put(scenarioId, new ArrayList<>(step.getExtras().keySet()));
+                        }
+
+                        tableDirty = true;
                     }
                 });
 
@@ -565,9 +548,9 @@ public class MainController {
         });
 
 
+
         actionColumn.setCellValueFactory(new PropertyValueFactory<>("action"));
         actionColumn.setEditable(true);
-
         actionColumn.setCellFactory(col -> new TableCell<>() {
             @Override
             protected void updateItem(String item, boolean empty) {
@@ -596,14 +579,21 @@ public class MainController {
                         step.setExtras(Arrays.stream(inputs).collect(Collectors.toMap(arg -> arg, arg -> "")));
                         step.setMaxArgs(inputs.length);
 
-                        // Rebuild dynamic columns immediately
-                        rebuildArgumentColumns(Arrays.asList(inputs));
+                        // ✅ Persist headers for current scenario
+                        TreeItem<TestNode> selectedScenario = treeView.getSelectionModel().getSelectedItem();
+                        if (selectedScenario != null && selectedScenario.getValue().getScenarioRef() != null) {
+                            String scenarioId = selectedScenario.getValue().getScenarioRef().getId();
+                            scenarioColumns.put(scenarioId, new ArrayList<>(step.getExtras().keySet()));
+                        }
+
+                        tableDirty = true;
                     }
                 });
 
                 setGraphic(combo);
             }
         });
+
 
 
         // Set static columns first
@@ -899,29 +889,26 @@ public class MainController {
         }
     }
 
-    // Helper: rebuild dynamic argument columns for the TableView
-    // Helper: rebuild dynamic argument columns for the TableView
-    private void rebuildArgumentColumns(List<String> argNames) {
-        // Reset to baseline static columns
+    private void rebuildArgumentColumns(List<String> persistedArgNames) {
         tableView.getColumns().setAll(itemColumn, objectColumn, actionColumn, descriptionColumn, inputColumn);
 
-        // ✅ Compute max args only from current scenario’s steps
-        int scenarioMaxArgs = tableView.getItems().stream()
-                .mapToInt(TestStep::getMaxArgs)
-                .max()
-                .orElse(0);
+        // Prefer persisted headers; if none, derive union of extras
+        Set<String> allArgNames = tableView.getItems().stream()
+                .flatMap(step -> step.getArgs().stream())
+                .collect(Collectors.toCollection(LinkedHashSet::new));
 
-        if (scenarioMaxArgs == 0) {
+        List<String> argNames = !persistedArgNames.isEmpty()
+                ? persistedArgNames
+                : new ArrayList<>(allArgNames);
+
+        if (argNames.isEmpty()) {
             log.info("Rebuilding dynamic columns skipped: no args for current scenario.");
             return;
         }
 
-        log.info("Rebuilding dynamic columns: argNames=" + argNames + ", scenarioMaxArgs=" + scenarioMaxArgs);
+        log.info("Rebuilding dynamic columns: argNames=" + argNames);
 
-        for (int i = 0; i < scenarioMaxArgs; i++) {
-            final int colIndex = i;
-            final String key = (i < argNames.size() ? argNames.get(i) : "Arg" + (i + 1));
-
+        for (String key : argNames) {
             TableColumn<TestStep, String> col = new TableColumn<>(key);
             col.setUserData("Dynamic");
             col.setEditable(true);
@@ -959,21 +946,14 @@ public class MainController {
                         return;
                     }
 
-                    String action = step.getAction();
-                    String[] inputs = (action == null || action.isBlank())
-                            ? new String[0]
-                            : getInputsForAction(action);
+                    floatingLabel.setText(key);
 
-                    if (colIndex < inputs.length) {
-                        String inputKey = inputs[colIndex];
-                        floatingLabel.setText(inputKey);
+                    if (step.getArgs().contains(key)) {
                         textField.setDisable(false);
-
-                        SimpleStringProperty newProp = step.getExtraProperty(inputKey);
+                        SimpleStringProperty newProp = step.getExtraProperty(key);
                         textField.textProperty().bindBidirectional(newProp);
                         currentProp = newProp;
                     } else {
-                        floatingLabel.setText("");
                         textField.setText("");
                         textField.setDisable(true);
                         textField.setStyle("-fx-text-fill: gray; -fx-font-style: italic;");
@@ -988,8 +968,6 @@ public class MainController {
 
         tableView.refresh();
     }
-
-
 
 
     private String[] getInputsForAction(String actionName) {
