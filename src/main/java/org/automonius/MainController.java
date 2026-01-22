@@ -51,36 +51,51 @@ import java.util.stream.Collectors;
 
 
 public class MainController {
-    @FXML private TreeView<TestNode> treeView;
-    @FXML private TableView<TestStep> tableView;
-    @FXML private TableColumn<TestStep, String> itemColumn;
-    @FXML private TableColumn<TestStep, String> actionColumn;
-    @FXML private TableColumn<TestStep, String> objectColumn;
-    @FXML private TableColumn<TestStep, String> inputColumn;
-    @FXML private Button newSuiteBtn;
-    @FXML private Button subSuiteBtn;
-    @FXML private Button testScenarioBtn;
-    @FXML private Button deleteBtn;
-    @FXML private Label testExplorerLabel;
-    @FXML private TableColumn<TestStep, String> descriptionColumn;
-    @FXML private VariableTreeController variableTreeController;
+    @FXML
+    private TreeView<TestNode> treeView;
+    @FXML
+    private TableView<TestStep> tableView;
+    @FXML
+    private TableColumn<TestStep, String> itemColumn;
+    @FXML
+    private TableColumn<TestStep, String> actionColumn;
+    @FXML
+    private TableColumn<TestStep, String> objectColumn;
+    @FXML
+    private TableColumn<TestStep, String> inputColumn;
+    @FXML
+    private Button newSuiteBtn;
+    @FXML
+    private Button subSuiteBtn;
+    @FXML
+    private Button testScenarioBtn;
+    @FXML
+    private Button deleteBtn;
+    @FXML
+    private Label testExplorerLabel;
+    @FXML
+    private TableColumn<TestStep, String> descriptionColumn;
+    @FXML
+    private VariableTreeController variableTreeController;
 
     private final Map<String, ObservableList<TestStep>> scenarioSteps = new HashMap<>();
 
 
     // Cache of extra column names per scenario
     private final Map<String, List<String>> scenarioColumns = new HashMap<>();
-    @FXML private final DataFormatter formatter = new DataFormatter();
+    @FXML
+    private final DataFormatter formatter = new DataFormatter();
     private Map<String, List<String>> actionsByObject;
-    @FXML private TextArea executionPreviewArea;
+    @FXML
+    private TextArea executionPreviewArea;
     private static final Logger log = Logger.getLogger(MainController.class.getName());
-    @FXML private CheckBox showStepsToggle;
-    private boolean tableDirty = false;
+    @FXML
+    private CheckBox showStepsToggle;
+    private static boolean tableDirty = false;
     private final Map<String, List<String>> argsByObject = new HashMap<>();
     private final Map<String, Integer> maxArgsByObject = new HashMap<>();
     private final ObservableList<TestStep> steps = FXCollections.observableArrayList();
-
-
+    private TreeItem<TestNode> draggedItem;
 
 
     @FXML
@@ -144,7 +159,6 @@ public class MainController {
                         ", args=" + defaultArgs);
             }
         }
-
 
 
         // --- TreeView setup ---
@@ -256,20 +270,35 @@ public class MainController {
         treeView.setContextMenu(contextMenu);
 
         // --- Drag and Drop setup ---
+
         treeView.setOnDragDetected(event -> {
-            TreeItem<TestNode> selected = treeView.getSelectionModel().getSelectedItem();
-            if (selected != null) {
+            draggedItem = treeView.getSelectionModel().getSelectedItem();
+            if (draggedItem != null) {
                 Dragboard db = treeView.startDragAndDrop(TransferMode.MOVE);
                 ClipboardContent content = new ClipboardContent();
-                content.putString(selected.getValue().getName());
+                content.putString(draggedItem.getValue().getName());
                 db.setContent(content);
-                event.consume();
             }
+            event.consume();
         });
 
         treeView.setOnDragOver(event -> {
             if (event.getGestureSource() != treeView && event.getDragboard().hasString()) {
-                event.acceptTransferModes(TransferMode.MOVE);
+                Node targetNode = event.getPickResult().getIntersectedNode();
+                TreeCell<TestNode> cell = null;
+                while (targetNode != null && !(targetNode instanceof TreeCell)) {
+                    targetNode = targetNode.getParent();
+                }
+                if (targetNode instanceof TreeCell) {
+                    cell = (TreeCell<TestNode>) targetNode;
+                }
+
+                if (cell != null && cell.getTreeItem() != null) {
+                    TreeItem<TestNode> targetItem = cell.getTreeItem();
+                    if (draggedItem != null && isValidDrop(draggedItem, targetItem)) {
+                        event.acceptTransferModes(TransferMode.MOVE);
+                    }
+                }
             }
             event.consume();
         });
@@ -277,16 +306,30 @@ public class MainController {
         treeView.setOnDragDropped(event -> {
             Dragboard db = event.getDragboard();
             if (db.hasString()) {
-                TreeItem<TestNode> dragged = treeView.getSelectionModel().getSelectedItem();
-                TreeItem<TestNode> target = treeView.getSelectionModel().getSelectedItem();
-                if (isValidDrop(dragged, target)) {
-                    dragged.getParent().getChildren().remove(dragged);
-                    target.getChildren().add(dragged);
+                Node targetNode = event.getPickResult().getIntersectedNode();
+                TreeCell<TestNode> cell = null;
+                while (targetNode != null && !(targetNode instanceof TreeCell)) {
+                    targetNode = targetNode.getParent();
                 }
-                event.setDropCompleted(true);
-                event.consume();
+                if (targetNode instanceof TreeCell) {
+                    cell = (TreeCell<TestNode>) targetNode;
+                }
+
+                if (cell != null && cell.getTreeItem() != null) {
+                    TreeItem<TestNode> targetItem = cell.getTreeItem();
+                    if (draggedItem != null && isValidDrop(draggedItem, targetItem)) {
+                        draggedItem.getParent().getChildren().remove(draggedItem);
+                        targetItem.getChildren().add(draggedItem);
+                        event.setDropCompleted(true);
+                    } else {
+                        event.setDropCompleted(false);
+                    }
+                }
             }
+            event.consume();
         });
+
+
         // --- Toggle listener rebuilds tree ---
         showStepsToggle.selectedProperty().addListener((obs, wasSelected, isSelected) -> {
             TreeItem<TestNode> currentRoot = treeView.getRoot();
@@ -337,13 +380,13 @@ public class MainController {
             // --- Commit edits back into the old scenario before switching ---
             if (oldItem != null
                     && oldItem.getValue().getType() == NodeType.TEST_SCENARIO
-                    && tableDirty) {
+                    && MainController.isTableDirty()) {
 
                 TestScenario oldScenario = oldItem.getValue().getScenarioRef();
                 if (oldScenario != null) {
                     ObservableList<TestStep> committedSteps = FXCollections.observableArrayList();
                     for (TestStep step : tableView.getItems()) {
-                        committedSteps.add(new TestStep(step)); // deep copy
+                        committedSteps.add(new TestStep(step)); // ✅ deep copy includes extras
                     }
 
                     // Persist steps in both the model and scenarioSteps map
@@ -358,24 +401,28 @@ public class MainController {
                     for (int i = 0; i < committedSteps.size(); i++) {
                         TestStep s = committedSteps.get(i);
                         log.info(String.format(
-                                "Commit row=%d, step identity=%d, stepId=%s",
+                                "Commit row=%d, step identity=%d, stepId=%s, extras=%s",
                                 i + 1,
                                 System.identityHashCode(s),
-                                s.getId()
+                                s.getId(),
+                                s.getArgs()
                         ));
                     }
 
-                    List<String> currentColumns = tableView.getColumns().stream()
-                            .skip(5)
+                    // Persist the dynamic argument names for this scenario
+                    List<String> argNamesForScenario = tableView.getColumns().stream()
+                            .filter(c -> "Dynamic".equals(c.getUserData()))
                             .map(TableColumn::getText)
                             .toList();
-                    scenarioColumns.put(oldScenario.getId(), currentColumns);
+                    scenarioColumns.put(oldScenario.getId(), argNamesForScenario);
+
 
                     String timestamp = java.time.LocalDateTime.now().toString();
                     logScenarioSnapshot("Commit", oldScenario, committedSteps, timestamp);
                     writeScenarioSnapshotToFile(oldScenario, committedSteps, "Commit", timestamp);
                 }
-                tableDirty = false;
+
+                MainController.resetTableDirty(); // ✅ clear dirty flag after commit
             }
 
             // --- Load the new scenario into the TableView ---
@@ -398,10 +445,11 @@ public class MainController {
                     for (int i = 0; i < stepsCopy.size(); i++) {
                         TestStep s = stepsCopy.get(i);
                         log.info(String.format(
-                                "Load row=%d, step identity=%d, stepId=%s",
+                                "Load row=%d, step identity=%d, stepId=%s, extras=%s",
                                 i + 1,
                                 System.identityHashCode(s),
-                                s.getId()
+                                s.getId(),
+                                s.getArgs()
                         ));
                     }
 
@@ -417,6 +465,7 @@ public class MainController {
                 }
             }
         });
+
 
 
         // --- Auto-select first scenario (if any) ---
@@ -478,114 +527,83 @@ public class MainController {
         objectColumn.setCellValueFactory(new PropertyValueFactory<>("object"));
         objectColumn.setEditable(true);
         objectColumn.setCellFactory(col -> new TableCell<>() {
-            private final ComboBox<String> combo = new ComboBox<>();
-
-            {
-                setGraphic(combo);
-                combo.setOnAction(event -> {
-                    TestStep step = (getTableRow() != null) ? getTableRow().getItem() : null;
-                    String selected = combo.getValue();
-
-                    if (step == null || selected == null) return;
-
-                    // Update object
-                    step.setObject(selected);
-
-                    // Auto‑assign first action for this object
-                    List<String> methods = actionsByObject.getOrDefault(selected, List.of());
-                    if (!methods.isEmpty()) {
-                        step.setAction(methods.get(0));
-                    }
-
-                    // Restore args and maxArgs
-                    List<String> restoredArgs = argsByObject.getOrDefault(selected, List.of());
-                    step.setExtras(restoredArgs.stream()
-                            .collect(Collectors.toMap(arg -> arg, arg -> "")));
-                    step.setMaxArgs(restoredArgs.size());
-
-                    // Rebuild dynamic columns immediately
-                    rebuildArgumentColumns(restoredArgs);
-                });
-            }
-
             @Override
             protected void updateItem(String item, boolean empty) {
                 super.updateItem(item, empty);
                 if (empty || getTableRow() == null || getTableRow().getItem() == null) {
                     setGraphic(null);
-                } else {
-                    TestStep step = getTableRow().getItem();
-                    combo.setItems(FXCollections.observableArrayList(actionsByObject.keySet()));
-
-                    // Bind ComboBox value to step.objectProperty
-                    combo.valueProperty().unbindBidirectional(step.objectProperty());
-                    combo.valueProperty().bindBidirectional(step.objectProperty());
-
-                    setGraphic(combo);
+                    return;
                 }
+
+                TestStep step = getTableRow().getItem();
+                ComboBox<String> combo = new ComboBox<>(FXCollections.observableArrayList(actionsByObject.keySet()));
+                combo.valueProperty().bindBidirectional(step.objectProperty());
+
+                combo.setOnAction(event -> {
+                    String selected = combo.getValue();
+                    if (selected != null) {
+                        step.setObject(selected);
+
+                        // Auto‑assign first action for this object
+                        List<String> methods = actionsByObject.getOrDefault(selected, List.of());
+                        if (!methods.isEmpty()) {
+                            step.setAction(methods.get(0));
+                        }
+
+                        // Restore args and maxArgs
+                        List<String> restoredArgs = argsByObject.getOrDefault(selected, List.of());
+                        step.setExtras(restoredArgs.stream().collect(Collectors.toMap(arg -> arg, arg -> "")));
+                        step.setMaxArgs(restoredArgs.size());
+
+                        // Rebuild dynamic columns immediately
+                        rebuildArgumentColumns(restoredArgs);
+                    }
+                });
+
+                setGraphic(combo);
             }
         });
-
 
 
         actionColumn.setCellValueFactory(new PropertyValueFactory<>("action"));
         actionColumn.setEditable(true);
 
         actionColumn.setCellFactory(col -> new TableCell<>() {
-            private final ComboBox<String> combo = new ComboBox<>();
-            private SimpleStringProperty boundProperty;
-
-            {
-                setGraphic(combo);
-                combo.setOnAction(event -> {
-                    TestStep step = (getTableRow() != null) ? getTableRow().getItem() : null;
-                    String selected = combo.getValue();
-
-                    if (step == null || selected == null) return;
-
-                    // Update action
-                    step.setAction(selected);
-
-                    // Restore args for this action
-                    String[] inputs = getInputsForAction(selected);
-                    step.setExtras(Arrays.stream(inputs).collect(Collectors.toMap(arg -> arg, arg -> "")));
-                    step.setMaxArgs(inputs.length);
-
-                    // Rebuild dynamic columns immediately
-                    rebuildArgumentColumns(Arrays.asList(inputs));
-                });
-            }
-
             @Override
             protected void updateItem(String item, boolean empty) {
                 super.updateItem(item, empty);
-
-                if (boundProperty != null) {
-                    combo.valueProperty().unbindBidirectional(boundProperty);
-                    boundProperty = null;
-                }
-
                 if (empty || getTableRow() == null || getTableRow().getItem() == null) {
                     setGraphic(null);
-                } else {
-                    TestStep step = getTableRow().getItem();
-
-                    List<String> availableActions = List.of();
-                    if (step.getObject() != null && !step.getObject().isBlank()) {
-                        availableActions = actionsByObject.getOrDefault(step.getObject(), List.of());
-                    }
-
-                    combo.setItems(FXCollections.observableArrayList(availableActions));
-                    combo.setDisable(availableActions.isEmpty());
-
-                    boundProperty = step.actionProperty();
-                    combo.valueProperty().bindBidirectional(boundProperty);
-
-                    setGraphic(combo);
+                    return;
                 }
+
+                TestStep step = getTableRow().getItem();
+                List<String> availableActions = step.getObject() != null && !step.getObject().isBlank()
+                        ? actionsByObject.getOrDefault(step.getObject(), List.of())
+                        : List.of();
+
+                ComboBox<String> combo = new ComboBox<>(FXCollections.observableArrayList(availableActions));
+                combo.setDisable(availableActions.isEmpty());
+                combo.valueProperty().bindBidirectional(step.actionProperty());
+
+                combo.setOnAction(event -> {
+                    String selected = combo.getValue();
+                    if (selected != null) {
+                        step.setAction(selected);
+
+                        // Restore args for this action
+                        String[] inputs = getInputsForAction(selected);
+                        step.setExtras(Arrays.stream(inputs).collect(Collectors.toMap(arg -> arg, arg -> "")));
+                        step.setMaxArgs(inputs.length);
+
+                        // Rebuild dynamic columns immediately
+                        rebuildArgumentColumns(Arrays.asList(inputs));
+                    }
+                });
+
+                setGraphic(combo);
             }
         });
-
 
 
         // Set static columns first
@@ -734,42 +752,34 @@ public class MainController {
 
     @FXML
     private void handleRun(ActionEvent event) {
-        // ✅ Commit any active edits first
         if (tableView.getEditingCell() != null) {
-            tableView.edit(-1, null); // forces commit of current edit
+            tableView.edit(-1, null);
         }
 
-        TestStep step = tableView.getSelectionModel().getSelectedItem();
-        if (step == null) {
-            Alert alert = new Alert(Alert.AlertType.WARNING);
-            alert.setTitle("Run Test");
-            alert.setHeaderText(null);
-            alert.setContentText("⚠️ No step selected to run.");
-            alert.show();
+        TestStep selectedStep = tableView.getSelectionModel().getSelectedItem();
+        if (selectedStep == null && !tableView.getItems().isEmpty()) {
+            tableView.getSelectionModel().selectFirst();
+            selectedStep = tableView.getSelectionModel().getSelectedItem();
+        }
+
+        if (selectedStep == null) {
+            updateExecutionPreview("⚠️ No step selected to run.");
             return;
         }
 
-        // 🔎 Debug: show annotation names vs extras map
-        String[] inputs = Arrays.stream(ActionLibrary.class.getDeclaredMethods())
-                .filter(m -> m.isAnnotationPresent(ActionMeta.class))
-                .filter(m -> m.getName().equals(step.getAction()))
-                .findFirst()
-                .map(m -> m.getAnnotation(ActionMeta.class).inputs())
-                .orElse(new String[0]);
+        String[] inputs = getInputsForAction(selectedStep.getAction());
+        updateExecutionPreview("Annotation input names: " + Arrays.toString(inputs));
+        updateExecutionPreview("Extras map: " + selectedStep.getExtras());
 
-        System.out.println("Annotation input names: " + Arrays.toString(inputs));
-        System.out.println("Extras map: " + step.getExtras());
+        Object resultObj = TestExecutor.runTest(selectedStep);
 
-        // Run the step
-        Object resultObj = TestExecutor.runTest(step);
+        String message = "Ran step: " + selectedStep.getAction() +
+                " on " + selectedStep.getObject() +
+                " → Result: " + resultObj;
 
-        // ✅ Push result into Execution Preview pane
-        updateExecutionPreview("Ran step: " + step.getAction() +
-                " on " + step.getObject() +
-                " → Result: " + resultObj);
+        updateExecutionPreview(message);
+        logStepChange("Run", selectedStep, Map.of("result", resultObj));
 
-        // Still print to terminal for detailed logs
-        System.out.println("Final Result: " + resultObj);
     }
 
 
@@ -890,23 +900,25 @@ public class MainController {
     }
 
     // Helper: rebuild dynamic argument columns for the TableView
+    // Helper: rebuild dynamic argument columns for the TableView
     private void rebuildArgumentColumns(List<String> argNames) {
-        // Reset to baseline static columns first
+        // Reset to baseline static columns
         tableView.getColumns().setAll(itemColumn, objectColumn, actionColumn, descriptionColumn, inputColumn);
 
-        // Compute global maximum args across all objects
-        int globalMaxArgs = maxArgsByObject.values().stream()
-                .max(Integer::compareTo)
+        // ✅ Compute max args only from current scenario’s steps
+        int scenarioMaxArgs = tableView.getItems().stream()
+                .mapToInt(TestStep::getMaxArgs)
+                .max()
                 .orElse(0);
 
-        if (globalMaxArgs == 0) {
-            log.info("Rebuilding dynamic columns skipped: no args yet.");
+        if (scenarioMaxArgs == 0) {
+            log.info("Rebuilding dynamic columns skipped: no args for current scenario.");
             return;
         }
 
-        log.info("Rebuilding dynamic columns: argNames=" + argNames + ", globalMaxArgs=" + globalMaxArgs);
+        log.info("Rebuilding dynamic columns: argNames=" + argNames + ", scenarioMaxArgs=" + scenarioMaxArgs);
 
-        for (int i = 0; i < globalMaxArgs; i++) {
+        for (int i = 0; i < scenarioMaxArgs; i++) {
             final int colIndex = i;
             final String key = (i < argNames.size() ? argNames.get(i) : "Arg" + (i + 1));
 
@@ -964,21 +976,10 @@ public class MainController {
                         floatingLabel.setText("");
                         textField.setText("");
                         textField.setDisable(true);
+                        textField.setStyle("-fx-text-fill: gray; -fx-font-style: italic;");
                     }
 
                     setGraphic(stack);
-                }
-            });
-
-            col.setOnEditCommit(event -> {
-                TestStep step = event.getRowValue();
-                if (step == null || step.getAction() == null || step.getAction().isBlank()) return;
-
-                String[] inputs = getInputsForAction(step.getAction());
-                if (colIndex < inputs.length) {
-                    String inputKey = inputs[colIndex];
-                    step.setExtra(inputKey, event.getNewValue());
-                    tableDirty = true;
                 }
             });
 
@@ -990,18 +991,11 @@ public class MainController {
 
 
 
+
     private String[] getInputsForAction(String actionName) {
         return Arrays.stream(ActionLibrary.class.getDeclaredMethods()).filter(m -> m.isAnnotationPresent(ActionMeta.class)).filter(m -> m.getName().equals(actionName)).findFirst().map(m -> m.getAnnotation(ActionMeta.class).inputs()).orElse(new String[0]);
     }
 
-    private void updateColumnHeadersForAction() {
-        List<TableColumn<TestStep, ?>> dynamicCols = tableView.getColumns().stream().filter(c -> "Dynamic".equals(c.getUserData())).toList();
-
-        for (int i = 0; i < dynamicCols.size(); i++) {
-            @SuppressWarnings("unchecked") TableColumn<TestStep, String> col = (TableColumn<TestStep, String>) dynamicCols.get(i);
-            col.setText("Arg" + (i + 1)); // ✅ stable header only
-        }
-    }
 
     private void updateExecutionPreview(String message) {
         if (executionPreviewArea != null) {
@@ -1310,23 +1304,25 @@ public class MainController {
     }
 
     private boolean isValidDrop(TreeItem<TestNode> dragged, TreeItem<TestNode> target) {
-        if (dragged == null || target == null) return false;
+        if (dragged == null || target == null) {
+            log.info("Drop rejected: dragged or target is null");
+            return false;
+        }
 
         NodeType dType = dragged.getValue().getType();
         NodeType tType = target.getValue().getType();
 
-        // Suites can only be dropped under root
-        if (dType == NodeType.SUITE && tType == NodeType.ROOT) return true;
+        boolean allowed = switch (dType) {
+            case SUITE -> (tType == NodeType.ROOT);
+            case SUB_SUITE -> (tType == NodeType.SUITE);
+            case TEST_SCENARIO -> (tType == NodeType.SUITE || tType == NodeType.SUB_SUITE);
+            default -> false;
+        };
 
-        // Sub-suites can only be dropped under suites
-        if (dType == NodeType.SUB_SUITE && tType == NodeType.SUITE) return true;
-
-        // Scenarios can be dropped under suites or sub-suites
-        if (dType == NodeType.TEST_SCENARIO &&
-                (tType == NodeType.SUITE || tType == NodeType.SUB_SUITE)) return true;
-
-        return false;
+        log.info(String.format("Drag type=%s, Target type=%s, Allowed=%s", dType, tType, allowed));
+        return allowed;
     }
+
 
     private ImageView makeIcon(String path, double width, double height) {
         URL resource = getClass().getResource(path);
@@ -1565,18 +1561,29 @@ public class MainController {
 
     @FXML
     private void handleAddRow(ActionEvent event) {
+        TreeItem<TestNode> selected = treeView.getSelectionModel().getSelectedItem();
+
+        // Guard: only allow adding when a TEST_SCENARIO is selected
+        if (selected == null || selected.getValue().getType() != NodeType.TEST_SCENARIO) {
+            Alert alert = new Alert(Alert.AlertType.WARNING);
+            alert.setTitle("Add Step");
+            alert.setHeaderText(null);
+            alert.setContentText("⚠️ Please select a Test Scenario before adding a step.");
+            alert.show();
+            return;
+        }
+
+        // Create and add new step
         TestStep newStep = new TestStep();
         tableView.getItems().add(newStep);
 
-        // Immediately commit to scenario model
-        TreeItem<TestNode> selected = treeView.getSelectionModel().getSelectedItem();
-        if (selected != null && selected.getValue().getType() == NodeType.TEST_SCENARIO) {
-            TestScenario scenario = selected.getValue().getScenarioRef();
-            if (scenario != null) {
-                scenario.getSteps().add(new TestStep(newStep)); // deep copy
-            }
+        // Commit to scenario model
+        TestScenario scenario = selected.getValue().getScenarioRef();
+        if (scenario != null) {
+            scenario.getSteps().add(new TestStep(newStep)); // deep copy
         }
     }
+
 
     @FXML
     private void handleDeleteRow(ActionEvent event) {
@@ -1677,13 +1684,14 @@ public class MainController {
         log.info(sb::toString);
     }
 
+
     // Utility to safely get row index
     private int getIndexSafe(TestStep step) {
-        // If step is bound to a TableRow, use its index; otherwise fallback
         return (tableView.getItems().contains(step))
                 ? tableView.getItems().indexOf(step) + 1
                 : -1;
     }
+
 
     private void logScenarioSnapshot(String phase,
                                      TestScenario scenario,
@@ -1737,5 +1745,22 @@ public class MainController {
     private String safeString(String value) {
         return (value == null || value.isBlank()) ? "<empty>" : value;
     }
+
+
+    // --- New static helper ---
+    public static void markTableDirty() {
+        tableDirty = true;
+    }
+
+    // --- Optional getter if you want to check from outside ---
+    public static boolean isTableDirty() {
+        return tableDirty;
+    }
+
+    // --- Optional reset after commit ---
+    public static void resetTableDirty() {
+        tableDirty = false;
+    }
+
 
 }
