@@ -1002,7 +1002,7 @@ public class MainController {
 
                     floatingLabel.setText(key);
 
-                    if (step.getArgs().contains(key)) {
+                    if (step.getExtras().containsKey(key)) {
                         textField.setDisable(false);
                         SimpleStringProperty newProp = step.getExtraProperty(key);
                         textField.textProperty().bindBidirectional(newProp);
@@ -1012,6 +1012,7 @@ public class MainController {
                         textField.setDisable(true);
                         textField.setStyle("-fx-text-fill: gray; -fx-font-style: italic;");
                     }
+
 
                     setGraphic(stack);
                 }
@@ -1625,16 +1626,39 @@ public class MainController {
             return;
         }
 
-        // Create and add new step
+        // Create new step seeded with current object/action
         TestStep newStep = new TestStep();
+
+        // Use currently selected object if available, otherwise default
+        String currentObject = objectColumn.getCellData(tableView.getSelectionModel().getSelectedIndex());
+        if (currentObject == null || currentObject.isBlank()) {
+            currentObject = argsByObject.keySet().stream().findFirst().orElse("");
+        }
+        newStep.setObject(currentObject);
+
+        // First action for that object
+        String defaultAction = actionsByObject.getOrDefault(currentObject, List.of())
+                .stream().findFirst().orElse("");
+        newStep.setAction(defaultAction);
+
+        // Seed extras with ordered args
+        List<String> args = argsByObject.getOrDefault(currentObject, List.of());
+        newStep.setExtras(args.stream()
+                .collect(Collectors.toMap(arg -> arg, arg -> "", (a,b) -> a, LinkedHashMap::new)));
+        newStep.setMaxArgs(args.size());
+
+        // Add to table and scenario
         tableView.getItems().add(newStep);
 
-        // Commit to scenario model
         TestScenario scenario = selected.getValue().getScenarioRef();
         if (scenario != null) {
             scenario.getSteps().add(new TestStep(newStep)); // deep copy
         }
+
+        tableDirty = true;
+        log.info(() -> "Added new step to scenario " + scenario.getId() + ": " + newStep);
     }
+
 
 
     @FXML
