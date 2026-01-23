@@ -6,8 +6,10 @@ import java.util.*;
 
 import com.google.gson.*;
 import javafx.application.Platform;
+import javafx.beans.property.ReadOnlyObjectWrapper;
 import javafx.beans.property.ReadOnlyStringWrapper;
 import javafx.beans.property.SimpleStringProperty;
+import javafx.beans.property.StringProperty;
 import javafx.beans.value.ChangeListener;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
@@ -96,6 +98,8 @@ public class MainController {
     private final Map<String, Integer> maxArgsByObject = new HashMap<>();
     private final ObservableList<TestStep> steps = FXCollections.observableArrayList();
     private TreeItem<TestNode> draggedItem;
+    @FXML private TableColumn<TestStep, TestStep> argsColumn;
+
 
 
     @FXML
@@ -145,8 +149,14 @@ public class MainController {
 
             List<String> defaultArgs = argsByObject.getOrDefault(defaultObject, List.of());
             blank.setExtras(defaultArgs.stream()
-                    .collect(Collectors.toMap(arg -> arg, arg -> "", (a,b) -> a, LinkedHashMap::new)));
+                    .collect(Collectors.toMap(
+                            arg -> arg,
+                            arg -> new SimpleStringProperty(""), // ✅ wrap each value in a property
+                            (a, b) -> a,
+                            LinkedHashMap::new
+                    )));
             blank.setMaxArgs(defaultArgs.size());
+
 
             // Persist headers for first scenario immediately
             if (!treeView.getRoot().getChildren().isEmpty()) {
@@ -442,6 +452,7 @@ public class MainController {
                     );
                     scenarioSteps.put(newScenario.getId(), stepsCopy);
                     tableView.setItems(stepsCopy);
+                    adjustArgsColumnWidth();
 
                     log.info(String.format(
                             "Load snapshot: scenario=%s, steps list identity=%d",
@@ -459,9 +470,6 @@ public class MainController {
                         ));
                     }
 
-                    List<String> cols = scenarioColumns.getOrDefault(newScenario.getId(), List.of());
-                    rebuildArgumentColumns(cols);
-
                     updateExecutionPreview("Loaded scenario: " + newScenario.getName() +
                             " (id=" + newScenario.getId() + ")");
 
@@ -473,7 +481,6 @@ public class MainController {
         });
 
 
-
         // --- Auto-select first scenario (if any) ---
         Platform.runLater(() -> {
             if (!treeView.getRoot().getChildren().isEmpty()) {
@@ -483,22 +490,17 @@ public class MainController {
                     treeView.getSelectionModel().select(firstScenarioItem);
                     treeView.getFocusModel().focus(treeView.getRow(firstScenarioItem));
 
-                    // ✅ Force rebuild once with persisted headers
-                    TestScenario firstScenario = firstScenarioItem.getValue().getScenarioRef();
-                    if (firstScenario != null) {
-                        List<String> cols = scenarioColumns.getOrDefault(firstScenario.getId(), List.of());
-                        rebuildArgumentColumns(cols);
-                    }
+
                 }
             }
         });
 
 
-
+        // --- Table setup ---
         // --- Table setup ---
         tableView.setEditable(true);
 
-        // Item column
+// Item column
         itemColumn.setCellValueFactory(cellData ->
                 new ReadOnlyStringWrapper(String.valueOf(tableView.getItems().indexOf(cellData.getValue()) + 1))
         );
@@ -512,7 +514,7 @@ public class MainController {
             }
         });
 
-        // Description column
+// Description column
         descriptionColumn.setCellValueFactory(new PropertyValueFactory<>("description"));
         descriptionColumn.setCellFactory(col -> new AutoCommitTextFieldTableCell<>());
         descriptionColumn.setOnEditCommit(event -> {
@@ -521,8 +523,7 @@ public class MainController {
             log.info(() -> "Edited description for step: " + event.getRowValue());
         });
 
-
-        // Input column
+// Input column
         inputColumn.setCellValueFactory(new PropertyValueFactory<>("input"));
         inputColumn.setCellFactory(col -> new AutoCommitTextFieldTableCell<>());
         inputColumn.setOnEditCommit(event -> {
@@ -531,6 +532,7 @@ public class MainController {
             log.info(() -> "Edited input for step: " + event.getRowValue());
         });
 
+// Object column
         objectColumn.setCellValueFactory(new PropertyValueFactory<>("object"));
         objectColumn.setEditable(true);
         objectColumn.setCellFactory(col -> new TableCell<>() {
@@ -543,7 +545,10 @@ public class MainController {
                 }
 
                 TestStep step = getTableRow().getItem();
-                ComboBox<String> combo = new ComboBox<>(FXCollections.observableArrayList(actionsByObject.keySet()));
+                List<String> availableObjects = new ArrayList<>(argsByObject.keySet());
+
+                ComboBox<String> combo = new ComboBox<>(FXCollections.observableArrayList(availableObjects));
+                combo.setDisable(availableObjects.isEmpty());
                 combo.valueProperty().bindBidirectional(step.objectProperty());
 
                 combo.setOnAction(event -> {
@@ -557,21 +562,21 @@ public class MainController {
                             step.setAction(methods.get(0));
                         }
 
-                        // Restore args and maxArgs
+                        // Restore args for this object
                         List<String> restoredArgs = argsByObject.getOrDefault(selected, List.of());
                         step.setExtras(restoredArgs.stream()
-                                .collect(Collectors.toMap(arg -> arg, arg -> "", (a,b) -> a, LinkedHashMap::new)));
-
+                                .collect(Collectors.toMap(
+                                        arg -> arg,
+                                        arg -> new SimpleStringProperty(""),
+                                        (a, b) -> a,
+                                        LinkedHashMap::new
+                                )));
                         step.setMaxArgs(restoredArgs.size());
 
-                        // ✅ Persist headers for current scenario
-                        TreeItem<TestNode> selectedScenario = treeView.getSelectionModel().getSelectedItem();
-                        if (selectedScenario != null && selectedScenario.getValue().getScenarioRef() != null) {
-                            String scenarioId = selectedScenario.getValue().getScenarioRef().getId();
-                            scenarioColumns.put(scenarioId, new ArrayList<>(step.getExtras().keySet()));
-                        }
-
                         tableDirty = true;
+                        tableView.refresh(); // ✅ refres// h so this row shows new extras immediately
+                        adjustArgsColumnWidth();
+
                     }
                 });
 
@@ -579,8 +584,7 @@ public class MainController {
             }
         });
 
-
-
+// Action column
         actionColumn.setCellValueFactory(new PropertyValueFactory<>("action"));
         actionColumn.setEditable(true);
         actionColumn.setCellFactory(col -> new TableCell<>() {
@@ -609,42 +613,59 @@ public class MainController {
                         // Restore args for this action
                         String[] inputs = getInputsForAction(selected);
                         step.setExtras(Arrays.stream(inputs)
-                                .collect(Collectors.toMap(arg -> arg, arg -> "", (a,b) -> a, LinkedHashMap::new)));
-
+                                .collect(Collectors.toMap(
+                                        arg -> arg,
+                                        arg -> new SimpleStringProperty(""),
+                                        (a, b) -> a,
+                                        LinkedHashMap::new
+                                )));
                         step.setMaxArgs(inputs.length);
 
-                        // ✅ Persist headers for current scenario
-                        TreeItem<TestNode> selectedScenario = treeView.getSelectionModel().getSelectedItem();
-                        if (selectedScenario != null && selectedScenario.getValue().getScenarioRef() != null) {
-                            String scenarioId = selectedScenario.getValue().getScenarioRef().getId();
-                            scenarioColumns.put(scenarioId, new ArrayList<>(step.getExtras().keySet()));
-                        }
-
                         tableDirty = true;
+                        tableView.refresh(); // ✅ refresh so this row shows new extras immediately
+                        adjustArgsColumnWidth();
+
                     }
                 });
 
                 setGraphic(combo);
             }
         });
+// Args column (row‑specific extras)
+        argsColumn = new TableColumn<>("Args");
+        argsColumn.setCellValueFactory(cellData -> new ReadOnlyObjectWrapper<>(cellData.getValue()));
+        argsColumn.setCellFactory(col -> new TableCell<>() {
+            @Override
+            protected void updateItem(TestStep step, boolean empty) {
+                super.updateItem(step, empty);
+                if (empty || step == null) {
+                    setGraphic(null);
+                    return;
+                }
 
-
-
-        // Set static columns first
-        tableView.getColumns().setAll(itemColumn, objectColumn, actionColumn, descriptionColumn, inputColumn);
-
-
-        tableView.setFixedCellSize(25);
-        // After tableView setup in initialize()
-        tableView.getSelectionModel().selectedItemProperty().addListener((obs, oldStep, newStep) -> {
-            if (newStep != null) {
-                log.info(() -> "Selected step: item=" + newStep.getItem() +
-                        ", action=" + newStep.getAction() +
-                        ", object=" + newStep.getObject());
-            } else {
-                log.info("TableView selection cleared.");
+                HBox box = new HBox(5);
+                for (Map.Entry<String, SimpleStringProperty> entry : step.getExtras().entrySet()) {
+                    TextField tf = new TextField();
+                    tf.textProperty().bindBidirectional(entry.getValue());
+                    tf.setPromptText(entry.getKey());
+                    tf.getStyleClass().add("arg-text-field");
+                    tf.setPrefWidth(100); // fixed width per field
+                    box.getChildren().add(tf);
+                }
+                setGraphic(box);
             }
         });
+
+
+// Final column set — replace rebuildArgumentColumns usage
+        tableView.getColumns().setAll(
+                itemColumn,
+                objectColumn,
+                actionColumn,
+                descriptionColumn,
+                inputColumn,
+                argsColumn // ✅ single column for row‑specific extras
+        );
 
 
     }
@@ -741,10 +762,12 @@ public class MainController {
                 header.createCell(colIndex++).setCellValue("Description");
                 header.createCell(colIndex++).setCellValue("Input");
 
-                List<String> extras = scenario.getExtras(); // now owned by the model
-                for (String colName : extras) {
+                Map<String, SimpleStringProperty> extras = scenario.getExtras();
+                // now owned by the model
+                for (String colName : extras.keySet()) {
                     header.createCell(colIndex++).setCellValue(colName);
                 }
+
 
                 // ✅ Write each step row with extras
                 for (TestStep step : scenario.getSteps()) {
@@ -756,9 +779,10 @@ public class MainController {
                     stepRow.createCell(colIndex++).setCellValue(step.getDescription());
                     stepRow.createCell(colIndex++).setCellValue(step.getInput());
 
-                    for (String colName : extras) {
+                    for (String colName : extras.keySet()) {
                         stepRow.createCell(colIndex++).setCellValue(step.getExtra(colName));
                     }
+
                 }
             }
         }
@@ -776,10 +800,12 @@ public class MainController {
 
     @FXML
     private void handleRun(ActionEvent event) {
+        // End any active cell editing before running
         if (tableView.getEditingCell() != null) {
             tableView.edit(-1, null);
         }
 
+        // Get the selected step, or default to the first one
         TestStep selectedStep = tableView.getSelectionModel().getSelectedItem();
         if (selectedStep == null && !tableView.getItems().isEmpty()) {
             tableView.getSelectionModel().selectFirst();
@@ -791,20 +817,32 @@ public class MainController {
             return;
         }
 
+        // Show annotation inputs and extras for debugging
         String[] inputs = getInputsForAction(selectedStep.getAction());
         updateExecutionPreview("Annotation input names: " + Arrays.toString(inputs));
         updateExecutionPreview("Extras map: " + selectedStep.getExtras());
 
+        // Run the test step
         Object resultObj = TestExecutor.runTest(selectedStep);
 
+        // Build a safe log map: include result and extras, skipping nulls
+        Map<String, Object> logData = new LinkedHashMap<>();
+        logData.put("result", resultObj);
+        selectedStep.getExtras().forEach((k, v) -> {
+            if (v != null) {
+                logData.put(k, v.get() == null ? "" : v.get());
+            }
+        });
+
+        // Update preview and log
         String message = "Ran step: " + selectedStep.getAction() +
                 " on " + selectedStep.getObject() +
                 " → Result: " + resultObj;
-
         updateExecutionPreview(message);
-        logStepChange("Run", selectedStep, Map.of("result", resultObj));
 
+        logStepChange("Run", selectedStep, logData);
     }
+
 
 
     public static TestCase getTestByAction(Class<?> clazz, String actionName) {
@@ -924,39 +962,16 @@ public class MainController {
     }
 
     private void rebuildArgumentColumns(List<String> persistedArgNames) {
+        // Reset to static columns
         tableView.getColumns().setAll(itemColumn, objectColumn, actionColumn, descriptionColumn, inputColumn);
 
-        // Prefer persisted headers; if none, derive union of extras
-        Set<String> allArgNames = tableView.getItems().stream()
-                .flatMap(step -> step.getArgs().stream())
-                .collect(Collectors.toCollection(LinkedHashSet::new));
-
-        List<String> argNames;
-        if (!persistedArgNames.isEmpty()) {
-            argNames = persistedArgNames;
-        } else {
-            // Sort numerically if names start with "num", otherwise keep natural order
-            argNames = allArgNames.stream()
-                    .sorted((a, b) -> {
-                        if (a.startsWith("num") && b.startsWith("num")) {
-                            try {
-                                int na = Integer.parseInt(a.substring(3));
-                                int nb = Integer.parseInt(b.substring(3));
-                                return Integer.compare(na, nb);
-                            } catch (NumberFormatException e) {
-                                return a.compareTo(b);
-                            }
-                        }
-                        // Ensure "operation" comes last
-                        if (a.equals("operation")) return 1;
-                        if (b.equals("operation")) return -1;
-                        return a.compareTo(b);
-                    })
-                    .toList();
-        }
+        // Use scenario-level headers only
+        List<String> argNames = (persistedArgNames != null && !persistedArgNames.isEmpty())
+                ? persistedArgNames
+                : List.of();
 
         if (argNames.isEmpty()) {
-            log.info("Rebuilding dynamic columns skipped: no args for current scenario.");
+            log.info("Rebuilding dynamic columns skipped: no persisted headers for current scenario.");
             return;
         }
 
@@ -1013,7 +1028,6 @@ public class MainController {
                         textField.setStyle("-fx-text-fill: gray; -fx-font-style: italic;");
                     }
 
-
                     setGraphic(stack);
                 }
             });
@@ -1023,8 +1037,6 @@ public class MainController {
 
         tableView.refresh();
     }
-
-
 
 
     private String[] getInputsForAction(String actionName) {
@@ -1041,7 +1053,6 @@ public class MainController {
                 })
                 .orElse(new String[0]);
     }
-
 
 
     private void updateExecutionPreview(String message) {
@@ -1118,11 +1129,20 @@ public class MainController {
 
             // Second row: column headers
             Row colHeaderRow = sheet.getRow(1);
-            List<String> extras = new ArrayList<>();
+            List<String> extraNames = new ArrayList<>();
             for (int i = 5; i < colHeaderRow.getLastCellNum(); i++) {
-                extras.add(colHeaderRow.getCell(i).getStringCellValue());
+                extraNames.add(colHeaderRow.getCell(i).getStringCellValue());
             }
-            scenario.setExtras(extras);
+
+            // Build scenario-level extras as Map<String, SimpleStringProperty>
+            Map<String, SimpleStringProperty> extrasMap = extraNames.stream()
+                    .collect(Collectors.toMap(
+                            name -> name,
+                            name -> new SimpleStringProperty(""),
+                            (a, b) -> a,
+                            LinkedHashMap::new
+                    ));
+            scenario.setExtras(extrasMap);
 
             // Remaining rows: steps
             for (int r = 2; r <= sheet.getLastRowNum(); r++) {
@@ -1138,10 +1158,11 @@ public class MainController {
                 TestStep step = new TestStep(item, action, object, input);
                 step.setDescription(description);
 
-                for (int i = 0; i < extras.size(); i++) {
-                    String extraName = extras.get(i);
+                // Fill extras for this step
+                for (int i = 0; i < extraNames.size(); i++) {
+                    String extraName = extraNames.get(i);
                     String extraVal = row.getCell(5 + i).getStringCellValue();
-                    step.setExtra(extraName, extraVal);
+                    step.setExtra(extraName, extraVal); // assumes TestStep.setExtra(name, value) updates the property
                 }
 
                 scenario.getSteps().add(step);
@@ -1154,6 +1175,7 @@ public class MainController {
             return null;
         }
     }
+
 
     public TestSuite importSuiteFromFile(File file) {
         try (FileInputStream fis = new FileInputStream(file);
@@ -1189,11 +1211,20 @@ public class MainController {
 
                     // Next row is header
                     Row colHeaderRow = sheet.getRow(++r);
-                    List<String> extras = new ArrayList<>();
+                    List<String> extraNames = new ArrayList<>();
                     for (int i = 5; i < colHeaderRow.getLastCellNum(); i++) {
-                        extras.add(colHeaderRow.getCell(i).getStringCellValue());
+                        extraNames.add(colHeaderRow.getCell(i).getStringCellValue());
                     }
-                    scenario.setExtras(extras);
+
+                    // Build scenario-level extras as Map<String, SimpleStringProperty>
+                    Map<String, SimpleStringProperty> extrasMap = extraNames.stream()
+                            .collect(Collectors.toMap(
+                                    name -> name,
+                                    name -> new SimpleStringProperty(""),
+                                    (a, b) -> a,
+                                    LinkedHashMap::new
+                            ));
+                    scenario.setExtras(extrasMap);
 
                     // Step rows until next marker
                     while (++r <= sheet.getLastRowNum()) {
@@ -1214,10 +1245,11 @@ public class MainController {
                         TestStep step = new TestStep(item, action, object, input);
                         step.setDescription(description);
 
-                        for (int i = 0; i < extras.size(); i++) {
-                            String extraName = extras.get(i);
+                        // Fill extras for this step
+                        for (int i = 0; i < extraNames.size(); i++) {
+                            String extraName = extraNames.get(i);
                             String extraVal = stepRow.getCell(5 + i).getStringCellValue();
-                            step.setExtra(extraName, extraVal);
+                            step.setExtra(extraName, extraVal); // assumes TestStep.setExtra(name, value) updates the property
                         }
 
                         scenario.getSteps().add(step);
@@ -1225,6 +1257,7 @@ public class MainController {
 
                     suite.addScenario(scenario);   // ✅ use addScenario helper
                 }
+
             }
 
             return suite;
@@ -1317,13 +1350,16 @@ public class MainController {
             copy.addStep(new TestStep(step));
         }
 
-
         // Copy extras list
-        copy.setExtras(new ArrayList<>(original.getExtras()));
+        Map<String, SimpleStringProperty> extrasCopy = new LinkedHashMap<>();
+        original.getExtras().forEach((key, prop) -> {
+            extrasCopy.put(key, new SimpleStringProperty(prop.get())); // deep copy each property
+        });
+        copy.setExtras(extrasCopy);
+
 
         return copy;
     }
-
 
 
     private TreeItem<TestNode> buildScenarioNode(TestScenario scenario) {
@@ -1615,8 +1651,6 @@ public class MainController {
     @FXML
     private void handleAddRow(ActionEvent event) {
         TreeItem<TestNode> selected = treeView.getSelectionModel().getSelectedItem();
-
-        // Guard: only allow adding when a TEST_SCENARIO is selected
         if (selected == null || selected.getValue().getType() != NodeType.TEST_SCENARIO) {
             Alert alert = new Alert(Alert.AlertType.WARNING);
             alert.setTitle("Add Step");
@@ -1626,39 +1660,58 @@ public class MainController {
             return;
         }
 
-        // Create new step seeded with current object/action
         TestStep newStep = new TestStep();
+        int selectedIndex = tableView.getSelectionModel().getSelectedIndex();
 
-        // Use currently selected object if available, otherwise default
-        String currentObject = objectColumn.getCellData(tableView.getSelectionModel().getSelectedIndex());
-        if (currentObject == null || currentObject.isBlank()) {
-            currentObject = argsByObject.keySet().stream().findFirst().orElse("");
+        if (selectedIndex >= 0) {
+            TestStep currentStep = tableView.getItems().get(selectedIndex);
+            newStep.setObject(currentStep.getObject());
+            newStep.setAction(currentStep.getAction());
+
+            Map<String, SimpleStringProperty> copiedExtras = currentStep.getExtras().entrySet().stream()
+                    .collect(Collectors.toMap(
+                            Map.Entry::getKey,
+                            e -> new SimpleStringProperty(e.getValue().get()),
+                            (a, b) -> a,
+                            LinkedHashMap::new
+                    ));
+            newStep.setExtras(copiedExtras);
+            newStep.setMaxArgs(currentStep.getMaxArgs());
+
+        } else {
+            // Fallback: use scenario’s first step object
+            TestScenario scenario = selected.getValue().getScenarioRef();
+            String currentObject = scenario.getSteps().isEmpty()
+                    ? argsByObject.keySet().stream().findFirst().orElse("")
+                    : scenario.getSteps().get(0).getObject();
+            newStep.setObject(currentObject);
+
+            String defaultAction = actionsByObject.getOrDefault(currentObject, List.of())
+                    .stream().findFirst().orElse("");
+            newStep.setAction(defaultAction);
+
+            List<String> args = argsByObject.getOrDefault(currentObject, List.of());
+            Map<String, SimpleStringProperty> seededExtras = args.stream()
+                    .collect(Collectors.toMap(
+                            arg -> arg,
+                            arg -> new SimpleStringProperty(""),
+                            (a, b) -> a,
+                            LinkedHashMap::new
+                    ));
+            newStep.setExtras(seededExtras);
+            newStep.setMaxArgs(args.size());
         }
-        newStep.setObject(currentObject);
 
-        // First action for that object
-        String defaultAction = actionsByObject.getOrDefault(currentObject, List.of())
-                .stream().findFirst().orElse("");
-        newStep.setAction(defaultAction);
-
-        // Seed extras with ordered args
-        List<String> args = argsByObject.getOrDefault(currentObject, List.of());
-        newStep.setExtras(args.stream()
-                .collect(Collectors.toMap(arg -> arg, arg -> "", (a,b) -> a, LinkedHashMap::new)));
-        newStep.setMaxArgs(args.size());
-
-        // Add to table and scenario
         tableView.getItems().add(newStep);
 
         TestScenario scenario = selected.getValue().getScenarioRef();
         if (scenario != null) {
-            scenario.getSteps().add(new TestStep(newStep)); // deep copy
+            scenario.getSteps().add(new TestStep(newStep));
         }
 
         tableDirty = true;
         log.info(() -> "Added new step to scenario " + scenario.getId() + ": " + newStep);
     }
-
 
 
     @FXML
@@ -1817,6 +1870,18 @@ public class MainController {
         log.info(() -> String.format("=== End %s snapshot ===", phase));
     }
 
+    private void adjustArgsColumnWidth() {
+        int maxArgs = tableView.getItems().stream()
+                .mapToInt(TestStep::getMaxArgs)
+                .max()
+                .orElse(0);
+
+        double widthPerField = 100;
+        double padding = 20;
+        argsColumn.setPrefWidth(maxArgs * widthPerField + padding);
+    }
+
+
     // Helper to avoid nulls in file output
     private String safeString(String value) {
         return (value == null || value.isBlank()) ? "<empty>" : value;
@@ -1837,6 +1902,7 @@ public class MainController {
     public static void resetTableDirty() {
         tableDirty = false;
     }
+
 
 
 }

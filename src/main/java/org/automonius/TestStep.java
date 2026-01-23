@@ -24,11 +24,12 @@ public class TestStep {
 
     private int maxArgs = 0;
 
+    // --- Constructors ---
+
     // Default constructor
     public TestStep() {
         this("", "", "", "");
     }
-
 
     // Main constructor
     public TestStep(String item, String action, String object, String input) {
@@ -58,9 +59,9 @@ public class TestStep {
         this.maxArgs = tc.getInputs().size();
     }
 
-    // Copy constructor with deep extras copy and preserved ID
+    // Copy constructor with deep extras copy
     public TestStep(TestStep original) {
-        this.id = original.id; // ✅ preserve ID for continuity
+        this.id = UUID.randomUUID().toString(); // 🔄 generate new ID for cloned step
         this.item = new SimpleStringProperty(original.getItem());
         this.action = new SimpleStringProperty(original.getAction());
         this.object = new SimpleStringProperty(original.getObject());
@@ -77,75 +78,33 @@ public class TestStep {
         }
     }
 
-    // --- New getter ---
+    // --- ID ---
     public String getId() {
         return id;
     }
 
     // --- Getters ---
-    public String getItem() {
-        return item.get();
-    }
-
-    public String getAction() {
-        return action.get();
-    }
-
-    public String getObject() {
-        return object.get();
-    }
-
-    public String getInput() {
-        return input.get();
-    }
-
-    public String getDescription() {
-        return description.get();
-    }
+    public String getItem() { return item.get(); }
+    public String getAction() { return action.get(); }
+    public String getObject() { return object.get(); }
+    public String getInput() { return input.get(); }
+    public String getDescription() { return description.get(); }
 
     // --- Setters ---
-    public void setItem(String value) {
-        this.item.set(value);
-    }
-
-    public void setAction(String value) {
-        this.action.set(value);
-    }
-
-    public void setObject(String value) {
-        this.object.set(value);
-    }
-
-    public void setInput(String value) {
-        this.input.set(value);
-    }
-
-    public void setDescription(String value) {
-        this.description.set(value);
-    }
+    public void setItem(String value) { this.item.set(value); }
+    public void setAction(String value) { this.action.set(value); }
+    public void setObject(String value) { this.object.set(value); }
+    public void setInput(String value) { this.input.set(value); }
+    public void setDescription(String value) { this.description.set(value); }
 
     // --- Property methods ---
-    public SimpleStringProperty itemProperty() {
-        return item;
-    }
+    public SimpleStringProperty itemProperty() { return item; }
+    public SimpleStringProperty actionProperty() { return action; }
+    public SimpleStringProperty objectProperty() { return object; }
+    public SimpleStringProperty inputProperty() { return input; }
+    public SimpleStringProperty descriptionProperty() { return description; }
 
-    public SimpleStringProperty actionProperty() {
-        return action;
-    }
-
-    public SimpleStringProperty objectProperty() {
-        return object;
-    }
-
-    public SimpleStringProperty inputProperty() {
-        return input;
-    }
-
-    public SimpleStringProperty descriptionProperty() {
-        return description;
-    }
-
-    // --- Dynamic extras (arguments and more) ---
+    // --- Dynamic extras ---
     public SimpleStringProperty getExtraProperty(String columnName) {
         return extras.computeIfAbsent(columnName, k -> {
             SimpleStringProperty prop = new SimpleStringProperty("");
@@ -163,21 +122,32 @@ public class TestStep {
     }
 
     public Map<String, SimpleStringProperty> getExtras() {
-        return Collections.unmodifiableMap(extras); // ✅ protect against external mutation
+        return Collections.unmodifiableMap(extras);
     }
 
-    public void setExtras(Map<String, String> newExtras) {
+    public void setExtras(Map<String, SimpleStringProperty> newExtras) {
         extras.clear();
         if (newExtras != null) {
-            newExtras.entrySet().stream().forEach(entry -> {
-                SimpleStringProperty prop = new SimpleStringProperty(entry.getValue());
-                attachDirtyListener(prop, entry.getKey());
-                extras.put(entry.getKey(), prop);
+            newExtras.forEach((key, prop) -> {
+                SimpleStringProperty copy = new SimpleStringProperty(prop.get());
+                attachDirtyListener(copy, key);
+                extras.put(key, copy);
             });
         }
     }
 
-    // Spread a pipe-separated string into annotation-driven extras
+    // --- Convenience helpers ---
+    public List<String> getExtraNames() {
+        return new ArrayList<>(extras.keySet());
+    }
+
+    public List<String> getExtraValues() {
+        return extras.values().stream()
+                .map(SimpleStringProperty::get)
+                .toList();
+    }
+
+    // --- Joined arguments ---
     public void setJoinedArguments(String joined, String[] inputNames) {
         if (joined == null || joined.isEmpty() || inputNames == null) return;
         String[] parts = joined.split("\\|");
@@ -186,7 +156,6 @@ public class TestStep {
         }
     }
 
-    // Collect annotation-driven extras back into a pipe-separated string
     public String getJoinedArguments(String[] inputNames) {
         if (inputNames == null) return "";
         List<String> values = new ArrayList<>();
@@ -196,39 +165,35 @@ public class TestStep {
         return String.join("|", values);
     }
 
-    // --- New methods for logging ---
+    // --- Logging ---
     public List<String> getArgs() {
-        return extras.values().stream()
-                .map(SimpleStringProperty::get)
-                .toList();
+        return getExtraValues();
     }
 
-    // --- MaxArgs accessors ---
-    public int getMaxArgs() {
-        return maxArgs;
-    }
-
-    public void setMaxArgs(int maxArgs) {
-        this.maxArgs = maxArgs;
-    }
+    // --- MaxArgs ---
+    public int getMaxArgs() { return maxArgs; }
+    public void setMaxArgs(int maxArgs) { this.maxArgs = maxArgs; }
 
     @Override
     public String toString() {
         return "TestStep{" +
-                "item=" + getItem() +
+                "id=" + id +
+                ", item=" + getItem() +
                 ", action=" + getAction() +
                 ", object=" + getObject() +
                 ", input=" + getInput() +
                 ", description=" + getDescription() +
                 ", maxArgs=" + maxArgs +
-                ", extras=" + extras +
+                ", extras=" + extras.entrySet().stream()
+                .map(e -> e.getKey() + "=" + e.getValue().get())
+                .toList() +
                 '}';
     }
 
-    // --- Helper for dirty tracking ---
+    // --- Dirty tracking ---
     private void attachDirtyListener(SimpleStringProperty prop, String key) {
         prop.addListener((obs, oldVal, newVal) -> {
-            MainController.markTableDirty(); // flip global dirty flag
+            MainController.markTableDirty(); // ensure this exists in MainController
             System.out.printf("Edited arg=%s, newValue=%s%n", key, newVal);
         });
     }

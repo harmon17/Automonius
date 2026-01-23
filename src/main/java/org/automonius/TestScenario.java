@@ -18,10 +18,11 @@ public class TestScenario {
     // Each scenario owns its own ObservableList of steps
     private final ObservableList<TestStep> steps = FXCollections.observableArrayList();
 
-    // Extras remain a simple List
-    private final List<String> extras = new ArrayList<>();
+    // Scenario-level extras act as headers (argument names + optional defaults)
+    private final Map<String, SimpleStringProperty> extras = new LinkedHashMap<>();
 
-    // Public constructor: always generates a unique UUID
+    // --- Constructors ---
+
     // Public constructor: always generates a unique UUID
     public TestScenario(String name,
                         Map<String, List<String>> argsByObject,
@@ -44,13 +45,20 @@ public class TestScenario {
                     .stream().findFirst().orElse(null);
             blank.setAction(defaultAction);
 
-            // Seed extras
+            // Seed extras with fresh StringProperty values
             List<String> defaultArgs = argsByObject.getOrDefault(defaultObject, List.of());
-
-            blank.setExtras(defaultArgs.stream()
-                    .collect(Collectors.toMap(arg -> arg, arg -> "", (a,b) -> a, LinkedHashMap::new)));
-
+            Map<String, SimpleStringProperty> seededExtras = defaultArgs.stream()
+                    .collect(Collectors.toMap(
+                            arg -> arg,
+                            arg -> new SimpleStringProperty(""),
+                            (a,b) -> a,
+                            LinkedHashMap::new
+                    ));
+            blank.setExtras(seededExtras);
             blank.setMaxArgs(defaultArgs.size());
+
+            // Also store scenario-level extras (headers + defaults)
+            this.extras.putAll(seededExtras);
         }
 
         this.steps.add(blank);
@@ -58,8 +66,6 @@ public class TestScenario {
         log.info(() -> "Seeded new scenario " + id +
                 " with initial blank step (maxArgs=" + blank.getMaxArgs() + ").");
     }
-
-
 
     // Package-private constructor: for deserialization only
     TestScenario(String id, String name) {
@@ -77,8 +83,10 @@ public class TestScenario {
             this.steps.add(new TestStep(step));
         }
 
-        // Copy extras
-        this.extras.addAll(original.getExtras());
+        // Deep copy extras (headers + default values)
+        original.getExtras().forEach((key, prop) -> {
+            this.extras.put(key, new SimpleStringProperty(prop.get()));
+        });
 
         log.info(() -> "Copied TestScenario from " + original.getId() + " to new id=" + this.id);
     }
@@ -101,15 +109,32 @@ public class TestScenario {
         log.fine(() -> "Added step to scenario " + id + ": " + step);
     }
 
-    // --- Extras ---
-    public List<String> getExtras() { return extras; }
-    public void setExtras(List<String> extras) {
-        this.extras.clear();
-        this.extras.addAll(extras);
+    // --- Extras (scenario-level headers + defaults) ---
+    public Map<String, SimpleStringProperty> getExtras() {
+        return Collections.unmodifiableMap(extras);
+    }
+
+    public void setExtras(Map<String, SimpleStringProperty> newExtras) {
+        extras.clear();
+        if (newExtras != null) {
+            newExtras.forEach((key, prop) -> extras.put(key, new SimpleStringProperty(prop.get())));
+        }
         log.fine(() -> "Set extras for scenario " + id + ": " + extras);
     }
+
     public void addExtra(String extraName) {
-        extras.add(extraName);
+        extras.put(extraName, new SimpleStringProperty(""));
         log.fine(() -> "Added extra column to scenario " + id + ": " + extraName);
+    }
+
+    // --- Convenience helpers ---
+    public List<String> getExtraNames() {
+        return new ArrayList<>(extras.keySet());
+    }
+
+    public List<String> getExtraValues() {
+        return extras.values().stream()
+                .map(SimpleStringProperty::get)
+                .toList();
     }
 }

@@ -1,0 +1,3 @@
+phase,timestamp,row,stepId,item,object,action,description,input,args,maxArgs
+Load,2026-01-23T14:05:00.201734200,1,"63ce1ff2-739d-4dff-b725-116e5304aa48","<empty>","Calculator","calculateTen","<empty>","<empty>","[, , , , , , , , , , ]",11
+Commit,2026-01-23T14:05:05.763985700,1,"4456d4cb-2250-435c-8ef1-2988ec3b06fe","<empty>","FileSystem","checkFileContainsKeyword","<empty>","<empty>","[, ]",2
