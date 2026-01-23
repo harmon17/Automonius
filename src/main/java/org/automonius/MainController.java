@@ -116,8 +116,9 @@ public class MainController {
             // Collect all distinct inputs across this object's actions
             List<String> allInputs = entry.getValue().stream()
                     .flatMap(tc -> tc.getInputs().stream())
-                    .distinct()
-                    .toList();
+                    .collect(Collectors.toCollection(LinkedHashSet::new)) // preserves encounter order
+                    .stream().toList();
+
 
             argsByObject.put(objectName, allInputs);
             maxArgsByObject.put(objectName, allInputs.size());
@@ -128,39 +129,60 @@ public class MainController {
                     .toList();
             actionsByObject.put(objectName, actions);
         }
-
 // ✅ Select the object with the most args
         String defaultObject = argsByObject.entrySet().stream()
                 .max(Comparator.comparingInt(e -> e.getValue().size()))
                 .map(Map.Entry::getKey)
                 .orElse(null);
 
-        if (defaultObject != null) {
+        if (defaultObject != null && !steps.isEmpty()) {
             String defaultAction = actionsByObject.getOrDefault(defaultObject, List.of())
                     .stream().findFirst().orElse(null);
 
-            // Seed the blank step
-            if (!steps.isEmpty()) {
-                TestStep blank = steps.get(0);
-                blank.setObject(defaultObject);
-                blank.setAction(defaultAction);
+            TestStep blank = steps.get(0);
+            blank.setObject(defaultObject);
+            blank.setAction(defaultAction);
 
-                List<String> defaultArgs = argsByObject.getOrDefault(defaultObject, List.of());
-                blank.setExtras(defaultArgs.stream()
-                        .collect(Collectors.toMap(arg -> arg, arg -> "")));
-                blank.setMaxArgs(defaultArgs.size());
+            List<String> defaultArgs = argsByObject.getOrDefault(defaultObject, List.of());
+            blank.setExtras(defaultArgs.stream()
+                    .collect(Collectors.toMap(arg -> arg, arg -> "", (a,b) -> a, LinkedHashMap::new)));
+            blank.setMaxArgs(defaultArgs.size());
 
-                log.info("Initialized with default object=" + defaultObject +
-                        ", action=" + defaultAction +
-                        ", args=" + defaultArgs);
+            // Persist headers for first scenario immediately
+            if (!treeView.getRoot().getChildren().isEmpty()) {
+                TreeItem<TestNode> firstSuite = treeView.getRoot().getChildren().get(0);
+                if (!firstSuite.getChildren().isEmpty()) {
+                    TestScenario firstScenario = firstSuite.getChildren().get(0).getValue().getScenarioRef();
+                    if (firstScenario != null) {
+                        scenarioColumns.put(firstScenario.getId(),
+                                new ArrayList<>(blank.getExtras().keySet()));
+                    }
+                }
             }
+
+
+            log.info("Initialized with default object=" + defaultObject +
+                    ", action=" + defaultAction +
+                    ", args=" + defaultArgs);
         }
 
-
-        // --- TreeView setup ---
+// --- TreeView setup ---
         TreeItem<TestNode> root = new TreeItem<>(new TestNode("Directory Structure", NodeType.ROOT));
         root.setExpanded(true);
         treeView.setRoot(root);
+
+// ✅ Now that root exists, persist default headers for first scenario
+        if (!root.getChildren().isEmpty()) {
+            TreeItem<TestNode> firstSuite = root.getChildren().get(0);
+            if (!firstSuite.getChildren().isEmpty()) {
+                TestScenario firstScenario = firstSuite.getChildren().get(0).getValue().getScenarioRef();
+                if (firstScenario != null && !steps.isEmpty()) {
+                    scenarioColumns.put(firstScenario.getId(),
+                            new ArrayList<>(steps.get(0).getExtras().keySet()));
+                }
+            }
+        }
+
 
         // --- Copy/Paste shortcuts ---
         final Clipboard clipboard = Clipboard.getSystemClipboard();
@@ -454,15 +476,23 @@ public class MainController {
 
         // --- Auto-select first scenario (if any) ---
         Platform.runLater(() -> {
-            if (!root.getChildren().isEmpty()) {
-                TreeItem<TestNode> firstSuite = root.getChildren().get(0);
+            if (!treeView.getRoot().getChildren().isEmpty()) {
+                TreeItem<TestNode> firstSuite = treeView.getRoot().getChildren().get(0);
                 if (!firstSuite.getChildren().isEmpty()) {
                     TreeItem<TestNode> firstScenarioItem = firstSuite.getChildren().get(0);
                     treeView.getSelectionModel().select(firstScenarioItem);
                     treeView.getFocusModel().focus(treeView.getRow(firstScenarioItem));
+
+                    // ✅ Force rebuild once with persisted headers
+                    TestScenario firstScenario = firstScenarioItem.getValue().getScenarioRef();
+                    if (firstScenario != null) {
+                        List<String> cols = scenarioColumns.getOrDefault(firstScenario.getId(), List.of());
+                        rebuildArgumentColumns(cols);
+                    }
                 }
             }
         });
+
 
 
         // --- Table setup ---
@@ -529,7 +559,9 @@ public class MainController {
 
                         // Restore args and maxArgs
                         List<String> restoredArgs = argsByObject.getOrDefault(selected, List.of());
-                        step.setExtras(restoredArgs.stream().collect(Collectors.toMap(arg -> arg, arg -> "")));
+                        step.setExtras(restoredArgs.stream()
+                                .collect(Collectors.toMap(arg -> arg, arg -> "", (a,b) -> a, LinkedHashMap::new)));
+
                         step.setMaxArgs(restoredArgs.size());
 
                         // ✅ Persist headers for current scenario
@@ -576,7 +608,9 @@ public class MainController {
 
                         // Restore args for this action
                         String[] inputs = getInputsForAction(selected);
-                        step.setExtras(Arrays.stream(inputs).collect(Collectors.toMap(arg -> arg, arg -> "")));
+                        step.setExtras(Arrays.stream(inputs)
+                                .collect(Collectors.toMap(arg -> arg, arg -> "", (a,b) -> a, LinkedHashMap::new)));
+
                         step.setMaxArgs(inputs.length);
 
                         // ✅ Persist headers for current scenario
@@ -897,9 +931,29 @@ public class MainController {
                 .flatMap(step -> step.getArgs().stream())
                 .collect(Collectors.toCollection(LinkedHashSet::new));
 
-        List<String> argNames = !persistedArgNames.isEmpty()
-                ? persistedArgNames
-                : new ArrayList<>(allArgNames);
+        List<String> argNames;
+        if (!persistedArgNames.isEmpty()) {
+            argNames = persistedArgNames;
+        } else {
+            // Sort numerically if names start with "num", otherwise keep natural order
+            argNames = allArgNames.stream()
+                    .sorted((a, b) -> {
+                        if (a.startsWith("num") && b.startsWith("num")) {
+                            try {
+                                int na = Integer.parseInt(a.substring(3));
+                                int nb = Integer.parseInt(b.substring(3));
+                                return Integer.compare(na, nb);
+                            } catch (NumberFormatException e) {
+                                return a.compareTo(b);
+                            }
+                        }
+                        // Ensure "operation" comes last
+                        if (a.equals("operation")) return 1;
+                        if (b.equals("operation")) return -1;
+                        return a.compareTo(b);
+                    })
+                    .toList();
+        }
 
         if (argNames.isEmpty()) {
             log.info("Rebuilding dynamic columns skipped: no args for current scenario.");
@@ -970,9 +1024,23 @@ public class MainController {
     }
 
 
+
+
     private String[] getInputsForAction(String actionName) {
-        return Arrays.stream(ActionLibrary.class.getDeclaredMethods()).filter(m -> m.isAnnotationPresent(ActionMeta.class)).filter(m -> m.getName().equals(actionName)).findFirst().map(m -> m.getAnnotation(ActionMeta.class).inputs()).orElse(new String[0]);
+        return Arrays.stream(ActionLibrary.class.getDeclaredMethods())
+                .filter(m -> m.isAnnotationPresent(ActionMeta.class))
+                .filter(m -> m.getName().equals(actionName))
+                .findFirst()
+                .map(m -> {
+                    String[] inputs = m.getAnnotation(ActionMeta.class).inputs();
+                    // preserve declared order
+                    return Arrays.stream(inputs)
+                            .collect(Collectors.toCollection(LinkedHashSet::new))
+                            .toArray(new String[0]);
+                })
+                .orElse(new String[0]);
     }
+
 
 
     private void updateExecutionPreview(String message) {
@@ -1241,15 +1309,20 @@ public class MainController {
     }
 
     private TestScenario cloneScenario(TestScenario original) {
-        TestScenario copy = new TestScenario(original.getName() + " Copy");
-
+        // Use the new constructor so the blank step is seeded with defaults
+        TestScenario copy = new TestScenario(original.getName() + " Copy", argsByObject, actionsByObject);
+        copy.getSteps().clear(); // remove the seeded blank
         for (TestStep step : original.getSteps()) {
-            copy.addStep(new TestStep(step)); // use copy constructor
+            copy.addStep(new TestStep(step));
         }
 
+
+        // Copy extras list
         copy.setExtras(new ArrayList<>(original.getExtras()));
+
         return copy;
     }
+
 
 
     private TreeItem<TestNode> buildScenarioNode(TestScenario scenario) {
@@ -1409,8 +1482,8 @@ public class MainController {
             dialog.showAndWait().ifPresent(name -> {
                 String trimmed = name.trim();
                 if (!trimmed.isEmpty()) {
-                    // Backing model
-                    TestScenario scenarioModel = new TestScenario(trimmed);
+                    // Backing model with seeded extras
+                    TestScenario scenarioModel = new TestScenario(trimmed, argsByObject, actionsByObject);
 
                     // Wrap in TestNode
                     TestNode node = new TestNode(trimmed, NodeType.TEST_SCENARIO);
@@ -1425,7 +1498,7 @@ public class MainController {
                             FXCollections.observableArrayList(scenarioModel.getSteps().stream()
                                     .map(TestStep::new)
                                     .toList()));
-                    scenarioColumns.put(scenarioModel.getId(), List.of());
+                    scenarioColumns.put(scenarioModel.getId(), new ArrayList<>(scenarioModel.getSteps().get(0).getExtras().keySet()));
 
                     if (treeView.getSelectionModel().getSelectedItem() == scenarioItem) {
                         tableView.setItems(scenarioSteps.get(scenarioModel.getId()));
@@ -1437,6 +1510,7 @@ public class MainController {
                     showError("Name cannot be empty.");
                 }
             });
+
         } else {
             showError("Scenario can only be added inside a Suite or Sub-Suite.");
         }

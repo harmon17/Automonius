@@ -2,6 +2,7 @@ package org.automonius;
 
 import javafx.beans.property.SimpleStringProperty;
 import org.automonius.exec.TestCase;
+
 import java.util.*;
 
 /**
@@ -19,7 +20,7 @@ public class TestStep {
     private final SimpleStringProperty input;
     private final SimpleStringProperty description;
 
-    private final Map<String, SimpleStringProperty> extras = new HashMap<>();
+    private final Map<String, SimpleStringProperty> extras = new LinkedHashMap<>();
 
     private int maxArgs = 0;
 
@@ -27,7 +28,6 @@ public class TestStep {
     public TestStep() {
         this("", "", "", "");
     }
-
 
 
     // Main constructor
@@ -83,25 +83,67 @@ public class TestStep {
     }
 
     // --- Getters ---
-    public String getItem() { return item.get(); }
-    public String getAction() { return action.get(); }
-    public String getObject() { return object.get(); }
-    public String getInput() { return input.get(); }
-    public String getDescription() { return description.get(); }
+    public String getItem() {
+        return item.get();
+    }
+
+    public String getAction() {
+        return action.get();
+    }
+
+    public String getObject() {
+        return object.get();
+    }
+
+    public String getInput() {
+        return input.get();
+    }
+
+    public String getDescription() {
+        return description.get();
+    }
 
     // --- Setters ---
-    public void setItem(String value) { this.item.set(value); }
-    public void setAction(String value) { this.action.set(value); }
-    public void setObject(String value) { this.object.set(value); }
-    public void setInput(String value) { this.input.set(value); }
-    public void setDescription(String value) { this.description.set(value); }
+    public void setItem(String value) {
+        this.item.set(value);
+    }
+
+    public void setAction(String value) {
+        this.action.set(value);
+    }
+
+    public void setObject(String value) {
+        this.object.set(value);
+    }
+
+    public void setInput(String value) {
+        this.input.set(value);
+    }
+
+    public void setDescription(String value) {
+        this.description.set(value);
+    }
 
     // --- Property methods ---
-    public SimpleStringProperty itemProperty() { return item; }
-    public SimpleStringProperty actionProperty() { return action; }
-    public SimpleStringProperty objectProperty() { return object; }
-    public SimpleStringProperty inputProperty() { return input; }
-    public SimpleStringProperty descriptionProperty() { return description; }
+    public SimpleStringProperty itemProperty() {
+        return item;
+    }
+
+    public SimpleStringProperty actionProperty() {
+        return action;
+    }
+
+    public SimpleStringProperty objectProperty() {
+        return object;
+    }
+
+    public SimpleStringProperty inputProperty() {
+        return input;
+    }
+
+    public SimpleStringProperty descriptionProperty() {
+        return description;
+    }
 
     // --- Dynamic extras (arguments and more) ---
     public SimpleStringProperty getExtraProperty(String columnName) {
@@ -127,10 +169,10 @@ public class TestStep {
     public void setExtras(Map<String, String> newExtras) {
         extras.clear();
         if (newExtras != null) {
-            newExtras.forEach((k, v) -> {
-                SimpleStringProperty prop = new SimpleStringProperty(v);
-                attachDirtyListener(prop, k);
-                extras.put(k, prop);
+            newExtras.entrySet().stream().forEach(entry -> {
+                SimpleStringProperty prop = new SimpleStringProperty(entry.getValue());
+                attachDirtyListener(prop, entry.getKey());
+                extras.put(entry.getKey(), prop);
             });
         }
     }

@@ -5,10 +5,9 @@ import javafx.beans.property.StringProperty;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.UUID;
+import java.util.*;
 import java.util.logging.Logger;
+import java.util.stream.Collectors;
 
 public class TestScenario {
     private static final Logger log = Logger.getLogger(TestScenario.class.getName());
@@ -24,21 +23,42 @@ public class TestScenario {
 
     // Public constructor: always generates a unique UUID
     // Public constructor: always generates a unique UUID
-    public TestScenario(String name) {
+    public TestScenario(String name,
+                        Map<String, List<String>> argsByObject,
+                        Map<String, List<String>> actionsByObject) {
         this(UUID.randomUUID().toString(), name);
 
-        // ✅ Seed with a blank step so TableView always has something to edit
         TestStep blank = new TestStep();
 
-        // ❌ Don’t force maxArgs=1 here
-        // Leave it unset (0) so rebuildArgumentColumns waits for object selection
-        blank.setMaxArgs(0);
+        // Pick default object with most args
+        String defaultObject = argsByObject.entrySet().stream()
+                .max(Comparator.comparingInt(e -> e.getValue().size()))
+                .map(Map.Entry::getKey)
+                .orElse(null);
+
+        if (defaultObject != null) {
+            blank.setObject(defaultObject);
+
+            // First action for that object
+            String defaultAction = actionsByObject.getOrDefault(defaultObject, List.of())
+                    .stream().findFirst().orElse(null);
+            blank.setAction(defaultAction);
+
+            // Seed extras
+            List<String> defaultArgs = argsByObject.getOrDefault(defaultObject, List.of());
+
+            blank.setExtras(defaultArgs.stream()
+                    .collect(Collectors.toMap(arg -> arg, arg -> "", (a,b) -> a, LinkedHashMap::new)));
+
+            blank.setMaxArgs(defaultArgs.size());
+        }
 
         this.steps.add(blank);
 
         log.info(() -> "Seeded new scenario " + id +
                 " with initial blank step (maxArgs=" + blank.getMaxArgs() + ").");
     }
+
 
 
     // Package-private constructor: for deserialization only
