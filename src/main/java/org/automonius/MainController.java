@@ -1503,22 +1503,39 @@ public class MainController {
             TestStep currentStep = tableView.getItems().get(selectedIndex);
             newStep.setObject(currentStep.getObject());
             newStep.setAction(currentStep.getAction());
-
-            Map<String, SimpleStringProperty> copiedExtras = currentStep.getExtras().entrySet().stream()
-                    .collect(Collectors.toMap(
-                            Map.Entry::getKey,
-                            e -> new SimpleStringProperty(e.getValue().get()),
-                            (a, b) -> a,
-                            LinkedHashMap::new
-                    ));
-            newStep.setExtras(copiedExtras);
+            newStep.setExtras(copyExtras(currentStep.getExtras()));
             newStep.setMaxArgs(currentStep.getMaxArgs());
         } else {
-            // Initialize blank step
-            newStep.setObject("");
-            newStep.setAction("");
-            newStep.setExtras(new LinkedHashMap<>());
-            newStep.setMaxArgs(0);
+            // Context-aware defaults
+            TestScenario scenario = selected.getValue().getScenarioRef();
+
+            // Prefer the last step in this scenario as a template
+            if (!scenario.getSteps().isEmpty()) {
+                TestStep lastStep = scenario.getSteps().get(scenario.getSteps().size() - 1);
+                newStep.setObject(lastStep.getObject());
+                newStep.setAction(lastStep.getAction());
+                newStep.setExtras(copyExtras(lastStep.getExtras()));
+                newStep.setMaxArgs(lastStep.getMaxArgs());
+            } else {
+                // Fall back to global discovery maps
+                String defaultObject = actionsByObject.keySet().stream().findFirst().orElse("");
+                newStep.setObject(defaultObject);
+
+                String defaultAction = actionsByObject.getOrDefault(defaultObject, List.of())
+                        .stream().findFirst().orElse("");
+                newStep.setAction(defaultAction);
+
+                List<String> defaultArgs = argsByObject.getOrDefault(defaultObject, List.of());
+                Map<String, SimpleStringProperty> extras = defaultArgs.stream()
+                        .collect(Collectors.toMap(
+                                arg -> arg,
+                                arg -> new SimpleStringProperty(""),
+                                (a, b) -> a,
+                                LinkedHashMap::new
+                        ));
+                newStep.setExtras(extras);
+                newStep.setMaxArgs(defaultArgs.size());
+            }
         }
 
         tableView.getItems().add(newStep);
@@ -1526,12 +1543,24 @@ public class MainController {
         TestScenario scenario = selected.getValue().getScenarioRef();
         if (scenario != null) {
             scenario.getSteps().add(new TestStep(newStep)); // deep copy
-            refreshScenarioUI(scenario); // 🔄 unified sync
+            refreshScenarioUI(scenario);
         }
 
         tableDirty = true;
         log.info(() -> "Added new step to scenario " + scenario.getId() + ": " + newStep);
     }
+
+    // Helper to copy extras
+    private Map<String, SimpleStringProperty> copyExtras(Map<String, SimpleStringProperty> original) {
+        return original.entrySet().stream()
+                .collect(Collectors.toMap(
+                        Map.Entry::getKey,
+                        e -> new SimpleStringProperty(e.getValue().get()),
+                        (a, b) -> a,
+                        LinkedHashMap::new
+                ));
+    }
+
 
 
     @FXML
