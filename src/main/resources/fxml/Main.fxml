@@ -10,8 +10,10 @@
 <?import javafx.scene.layout.*?>
 <?import org.kordamp.ikonli.javafx.FontIcon?>
 <?import java.lang.String?>
-
-
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+<?import org.kordamp.ikonli.javafx.FontIcon?>
+<?import java.lang.String?>
 
 <AnchorPane fx:id="rootPane" prefHeight="783.0" prefWidth="1165.0" styleClass="main-background"
             xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1"
@@ -23,14 +25,19 @@
         <MenuBar AnchorPane.topAnchor="0.0" AnchorPane.leftAnchor="0.0" AnchorPane.rightAnchor="0.0"
                  styleClass="menu-bar">
             <menus>
-                <Menu text="File">
+                <!-- Replaced File menu with Context menu -->
+                <Menu text="Context">
                     <items>
-                        <MenuItem text="New"/>
-                        <MenuItem text="Open"/>
-                        <MenuItem text="Save"/>
-                        <MenuItem text="Exit"/>
+                        <!-- onAction="#handleAddEnvironment",onAction="#handleAddEntity",onAction="#handleImportProfiles",onAction="#handleExportProfiles" -->
+                        <MenuItem text="Add Environment"/>
+                        <MenuItem text="Add Entity"/>
+                        <SeparatorMenuItem/>
+                        <MenuItem text="Import Profiles"/>
+                        <MenuItem text="Export Profiles"/>
                     </items>
                 </Menu>
+
+                <!-- Keep other menus -->
                 <Menu text="Edit">
                     <items>
                         <MenuItem text="Undo"/>
@@ -54,26 +61,43 @@
         <VBox prefWidth="220.0" spacing="10" styleClass="explorer-box"
               AnchorPane.topAnchor="40.0" AnchorPane.leftAnchor="20.0" AnchorPane.bottomAnchor="20.0">
             <children>
+                <!-- Explorer title -->
                 <Label fx:id="testExplorerLabel" text="Test Explorer" styleClass="explorer-label"/>
 
                 <!-- Explorer control buttons -->
                 <HBox spacing="6" alignment="CENTER" styleClass="group-b-box">
                     <children>
                         <Button onAction="#handleNewSuite" styleClass="rounded-addrow-btn">
-                            <graphic><FontIcon iconLiteral="mdi-folder-plus" iconSize="16"/></graphic>
-                            <tooltip><Tooltip text="New Suite"/></tooltip>
+                            <graphic>
+                                <FontIcon iconLiteral="mdi-folder-plus" iconSize="16"/>
+                            </graphic>
+                            <tooltip>
+                                <Tooltip text="New Suite"/>
+                            </tooltip>
                         </Button>
                         <Button onAction="#handleNewSubSuite" styleClass="rounded-addrow-btn">
-                            <graphic><FontIcon iconLiteral="mdi-folder-outline" iconSize="16"/></graphic>
-                            <tooltip><Tooltip text="New Sub-Suite"/></tooltip>
+                            <graphic>
+                                <FontIcon iconLiteral="mdi-folder-outline" iconSize="16"/>
+                            </graphic>
+                            <tooltip>
+                                <Tooltip text="New Sub-Suite"/>
+                            </tooltip>
                         </Button>
                         <Button onAction="#handleNewTestScenario" styleClass="rounded-addrow-btn">
-                            <graphic><FontIcon iconLiteral="mdi-file-outline" iconSize="16"/></graphic>
-                            <tooltip><Tooltip text="New TestScenario"/></tooltip>
+                            <graphic>
+                                <FontIcon iconLiteral="mdi-file-outline" iconSize="16"/>
+                            </graphic>
+                            <tooltip>
+                                <Tooltip text="New Test Scenario"/>
+                            </tooltip>
                         </Button>
                         <Button onAction="#handleDelete" styleClass="rounded-addrow-btn">
-                            <graphic><FontIcon iconLiteral="mdi-delete" iconSize="16"/></graphic>
-                            <tooltip><Tooltip text="Delete"/></tooltip>
+                            <graphic>
+                                <FontIcon iconLiteral="mdi-delete" iconSize="16"/>
+                            </graphic>
+                            <tooltip>
+                                <Tooltip text="Delete"/>
+                            </tooltip>
                         </Button>
                     </children>
                 </HBox>
@@ -83,41 +107,17 @@
 
                 <!-- Toggle: Show steps in tree -->
                 <CheckBox fx:id="showStepsToggle" text="Show steps in tree" selected="false"/>
+                <TitledPane text="Last Payload Sent" expanded="true">
+                    <content>
+                        <TextArea fx:id="lastPayloadArea" editable="false" wrapText="true"/>
+                    </content>
+                </TitledPane>
 
-                <!-- Environment + Entity box -->
-                <VBox spacing="6" styleClass="environment-box">
-                    <children>
-                        <Label text="Environment"/>
-                        <ChoiceBox fx:id="environmentChoice">
-                            <items>
-                                <FXCollections fx:factory="observableArrayList">
-                                    <String fx:value="Dev"/>
-                                    <String fx:value="Staging"/>
-                                    <String fx:value="Prod"/>
-                                </FXCollections>
-                            </items>
-                        </ChoiceBox>
 
-                        <!-- NEW: Entity selector -->
-                        <Label text="Entity"/>
-                        <ChoiceBox fx:id="entityChoice">
-                            <items>
-                                <FXCollections fx:factory="observableArrayList">
-                                    <String fx:value="China"/>
-                                    <String fx:value="Japan"/>
-                                    <String fx:value="Philippines"/>
-                                </FXCollections>
-                            </items>
-                        </ChoiceBox>
-
-                        <Label text="Timeout (sec)"/>
-                        <TextField fx:id="timeoutField" promptText="30"/>
-                        <Label text="Retries"/>
-                        <Spinner fx:id="retrySpinner" initialValue="1" max="5" min="0"/>
-                    </children>
-                </VBox>
             </children>
         </VBox>
+
+
         <!-- TableView Panel -->
         <VBox prefWidth="620.0" spacing="10" styleClass="table-box"
               AnchorPane.topAnchor="40.0" AnchorPane.leftAnchor="260.0" AnchorPane.rightAnchor="320.0"
@@ -129,41 +129,75 @@
                         <HBox spacing="8" styleClass="group-a-box">
                             <children>
                                 <Button fx:id="runBtn" onAction="#handleRun" styleClass="rounded-action-btn">
-                                    <graphic><FontIcon iconLiteral="mdi-play-circle-outline" iconSize="18"/></graphic>
+                                    <graphic>
+                                        <FontIcon iconLiteral="mdi-play-circle-outline" iconSize="18"/>
+                                    </graphic>
                                 </Button>
                                 <Button fx:id="saveBtn" onAction="#handleSave" styleClass="rounded-action-btn">
-                                    <graphic><FontIcon iconLiteral="mdi-content-save" iconSize="18"/></graphic>
+                                    <graphic>
+                                        <FontIcon iconLiteral="mdi-content-save" iconSize="18"/>
+                                    </graphic>
                                 </Button>
                                 <Button fx:id="reportBtn" styleClass="rounded-action-btn">
-                                    <graphic><FontIcon iconLiteral="mdi-file-chart" iconSize="18"/></graphic>
+                                    <graphic>
+                                        <FontIcon iconLiteral="mdi-file-chart" iconSize="18"/>
+                                    </graphic>
                                 </Button>
                                 <Button fx:id="tagBtn" styleClass="rounded-action-btn">
-                                    <graphic><FontIcon iconLiteral="mdi-tag" iconSize="18"/></graphic>
+                                    <graphic>
+                                        <FontIcon iconLiteral="mdi-tag" iconSize="18"/>
+                                    </graphic>
                                 </Button>
                             </children>
                         </HBox>
 
-                        <Region><HBox.hgrow><Priority fx:constant="ALWAYS"/></HBox.hgrow></Region>
+                        <Region>
+                            <HBox.hgrow>
+                                <Priority fx:constant="ALWAYS"/>
+                            </HBox.hgrow>
+                        </Region>
 
+                        <!-- Keep AddRow/AddColumn/etc. -->
                         <HBox spacing="8" styleClass="group-b-box">
                             <children>
                                 <Button fx:id="AddRow" onAction="#handleAddRow" styleClass="rounded-addrow-btn">
-                                    <graphic><FontIcon iconLiteral="mdi-plus" iconSize="16"/></graphic>
+                                    <graphic>
+                                        <FontIcon iconLiteral="mdi-plus" iconSize="16"/>
+                                    </graphic>
                                 </Button>
                                 <Button fx:id="DeleteRow" onAction="#handleDeleteRow" styleClass="rounded-addrow-btn">
-                                    <graphic><FontIcon iconLiteral="mdi-minus" iconSize="16"/></graphic>
+                                    <graphic>
+                                        <FontIcon iconLiteral="mdi-minus" iconSize="16"/>
+                                    </graphic>
                                 </Button>
                                 <Button fx:id="AddColumn" onAction="#handleAddColumn" styleClass="rounded-addrow-btn">
-                                    <graphic><FontIcon iconLiteral="mdi-table-column-plus-after" iconSize="16"/></graphic>
+                                    <graphic>
+                                        <FontIcon iconLiteral="mdi-table-column-plus-after" iconSize="16"/>
+                                    </graphic>
                                 </Button>
-                                <Button fx:id="DeleteColumn" onAction="#handleDeleteColumn" styleClass="rounded-addrow-btn">
-                                    <graphic><FontIcon iconLiteral="mdi-table-column-remove" iconSize="16"/></graphic>
+                                <Button fx:id="DeleteColumn" onAction="#handleDeleteColumn"
+                                        styleClass="rounded-addrow-btn">
+                                    <graphic>
+                                        <FontIcon iconLiteral="mdi-table-column-remove" iconSize="16"/>
+                                    </graphic>
                                 </Button>
                                 <Button fx:id="MoveUp" onAction="#handleMoveUp" styleClass="rounded-addrow-btn">
-                                    <graphic><FontIcon iconLiteral="mdi-arrow-up" iconSize="16"/></graphic>
+                                    <graphic>
+                                        <FontIcon iconLiteral="mdi-arrow-up" iconSize="16"/>
+                                    </graphic>
                                 </Button>
                                 <Button fx:id="MoveDown" onAction="#handleMoveDown" styleClass="rounded-addrow-btn">
-                                    <graphic><FontIcon iconLiteral="mdi-arrow-down" iconSize="16"/></graphic>
+                                    <graphic>
+                                        <FontIcon iconLiteral="mdi-arrow-down" iconSize="16"/>
+                                    </graphic>
+                                </Button>
+                                <Button fx:id="refreshBtn" onAction="#handleRefresh" styleClass="rounded-addrow-btn">
+                                    <graphic>
+                                        <FontIcon iconLiteral="mdi-refresh" iconSize="16"/>
+                                    </graphic>
+                                    <tooltip>
+                                        <Tooltip text="Refresh TableView"/>
+                                    </tooltip>
                                 </Button>
                             </children>
                         </HBox>
@@ -176,38 +210,77 @@
                         <TableColumn fx:id="itemColumn" text="#"/>
                         <TableColumn fx:id="objectColumn" text="Object"/>
                         <TableColumn fx:id="actionColumn" text="Action"/>
-                        <TableColumn fx:id="descriptionColumn" text="Description"/>
-                        <TableColumn fx:id="inputColumn" text="Input"/>
                         <TableColumn fx:id="typeColumn" text="Type"/>
-                        <!-- NEW: Placeholder dynamic columns -->
-                        <TableColumn fx:id="dynamicPlaceholderColumn" text="Dynamic Inputs"/>
+                        <TableColumn fx:id="descriptionColumn" text="Description"/>
+                        <!-- Dynamic argument columns -->
+                        <TableColumn fx:id="argumentsColumn" text="Arguments"/>
+                        <TableColumn fx:id="statusColumn" text="Status"/>
                     </columns>
                 </TableView>
 
-                <!-- NEW: Execution Preview -->
+
+                <!-- Execution Preview -->
                 <TitledPane text="Execution Preview" expanded="false" styleClass="execution-preview-box">
                     <content>
                         <TextArea fx:id="executionPreviewArea" editable="false" wrapText="true"/>
                     </content>
                 </TitledPane>
-
             </children>
         </VBox>
 
-        <!-- Variables / Logs Panel -->
-        <VBox prefWidth="280.0" spacing="10" styleClass="variables-box"
-              AnchorPane.topAnchor="40.0" AnchorPane.rightAnchor="20.0" AnchorPane.bottomAnchor="20.0">
+        <!-- Context Panel: Environment + Entity + Execution Settings -->
+        <VBox spacing="10" styleClass="environment-box"
+              prefWidth="280.0"
+              AnchorPane.topAnchor="40.0"
+              AnchorPane.rightAnchor="20.0"
+              AnchorPane.bottomAnchor="20.0">
+
             <children>
-                <SplitPane dividerPositions="0.3" orientation="VERTICAL">
-                    <items>
-                        <!-- Variables panel -->
-                        <fx:include source="variable.fxml"/>
+                <!-- Environment selector -->
+                <HBox spacing="8">
+                    <Label text="Environment:"/>
+                    <ChoiceBox fx:id="environmentChoice"/>
+                </HBox>
 
+                <!-- Entity selector -->
+                <HBox spacing="8">
+                    <Label text="Entity:"/>
+                    <ChoiceBox fx:id="entityChoice"/>
+                </HBox>
 
-                    </items>
-                </SplitPane>
+                <!-- Timeout -->
+                <HBox spacing="8">
+                    <Label text="Timeout (sec):"/>
+                    <TextField fx:id="timeoutField" promptText="30"/>
+                </HBox>
+
+                <!-- Retries -->
+                <HBox spacing="8">
+                    <Label text="Retries:"/>
+                    <Spinner fx:id="retrySpinner" initialValue="1" min="0" max="5"/>
+                </HBox>
+
+                <!-- Resolved Variables -->
+                <TitledPane text="Resolved Variables" expanded="true">
+                    <content>
+                        <ListView fx:id="resolvedVariableList"/>
+                    </content>
+                </TitledPane>
+
+                <!-- Payload editor trigger -->
+                <Button text="Edit Payload" onAction="#handleEditPayload"/>
+
+                <!-- Payload preview -->
+                <TitledPane text="Payload Preview" expanded="false">
+                    <content>
+                        <TextArea fx:id="resolvedPayloadArea" editable="false" wrapText="true"/>
+                    </content>
+                </TitledPane>
             </children>
         </VBox>
+
+
 
     </children>
 </AnchorPane>
+

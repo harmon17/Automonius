@@ -14,3 +14,4 @@ public @interface ActionMeta {
     String description();    // Human-readable description
     String[] inputs();       // Expected inputs (parameter names)
 }
+

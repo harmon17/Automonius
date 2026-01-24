@@ -1,7 +1,10 @@
 package org.automonius;
 
-import java.util.ArrayList;
-import java.util.List;
+import javafx.beans.property.SimpleStringProperty;
+import javafx.beans.property.StringProperty;
+import javafx.collections.FXCollections;
+import javafx.collections.ObservableList;
+
 import java.util.UUID;
 import java.util.logging.Logger;
 
@@ -9,48 +12,59 @@ public class TestSuite {
     private static final Logger log = Logger.getLogger(TestSuite.class.getName());
 
     private final String id;
-    private String name;
-    private final List<TestScenario> scenarios = new ArrayList<>();
-    private final List<TestSuite> subSuites = new ArrayList<>(); // NEW
+    private final StringProperty name = new SimpleStringProperty();
 
-    // Existing constructor (auto-generates UUID)
+    // Reactive lists for scenarios and sub-suites
+    private final ObservableList<TestScenario> scenarios = FXCollections.observableArrayList();
+    private final ObservableList<TestSuite> subSuites = FXCollections.observableArrayList();
+
+    // --- Constructors ---
+
+    // Public constructor: auto-generates UUID
     public TestSuite(String name) {
         this(UUID.randomUUID().toString(), name);
     }
 
-    // New constructor (explicit id + name)
+    // Explicit constructor: id + name
     public TestSuite(String id, String name) {
         this.id = id;
-        this.name = name;
+        this.name.set(name);
         log.info(() -> "Created TestSuite: id=" + id + ", name=" + name);
     }
 
+    // --- ID ---
     public String getId() { return id; }
-    public String getName() { return name; }
-    public void setName(String name) {
-        log.fine(() -> "Renaming suite " + id + " from " + this.name + " to " + name);
-        this.name = name;
-    }
 
-    public List<TestScenario> getScenarios() { return scenarios; }
-    public List<TestSuite> getSubSuites() { return subSuites; } // NEW
+    // --- Name ---
+    public String getName() { return name.get(); }
+    public void setName(String newName) {
+        log.fine(() -> "Renaming suite " + id + " from " + this.name.get() + " to " + newName);
+        this.name.set(newName);
+    }
+    public StringProperty nameProperty() { return name; }
+
+    // --- Scenarios ---
+    // --- Scenarios ---
+    public ObservableList<TestScenario> getScenarios() {
+        return scenarios;
+    }
 
     public void addScenario(TestScenario scenario) {
         scenarios.add(scenario);
         log.fine(() -> "Added scenario " + scenario.getId() + " to suite " + id);
     }
-
     public void removeScenario(TestScenario scenario) {
         scenarios.remove(scenario);
         log.fine(() -> "Removed scenario " + scenario.getId() + " from suite " + id);
     }
 
-    public void addSubSuite(TestSuite subSuite) { // NEW
+    // --- Sub-suites ---
+    public ObservableList<TestSuite> getSubSuites() { return subSuites; }
+    public void addSubSuite(TestSuite subSuite) {
         subSuites.add(subSuite);
         log.fine(() -> "Added sub-suite " + subSuite.getId() + " to suite " + id);
     }
-
-    public void removeSubSuite(TestSuite subSuite) { // NEW
+    public void removeSubSuite(TestSuite subSuite) {
         subSuites.remove(subSuite);
         log.fine(() -> "Removed sub-suite " + subSuite.getId() + " from suite " + id);
     }

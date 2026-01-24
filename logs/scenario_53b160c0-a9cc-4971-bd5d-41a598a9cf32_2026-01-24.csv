@@ -1,0 +1,3 @@
+phase,timestamp,row,stepId,item,object,action,description,input,args,maxArgs
+Load,2026-01-24T02:53:22.851728900,1,"515b37fc-19c9-4b9f-9f8c-095c3fefad94","<empty>","Calculator","calculateTen","<empty>","<empty>","[, , , , , , , , , , ]",11
+Load,2026-01-24T02:53:30.610708400,1,"081c2810-7d40-48a5-a6f0-b28874f42acb","<empty>","Calculator","calculateTen","<empty>","<empty>","[, , , , , , , , , , ]",11

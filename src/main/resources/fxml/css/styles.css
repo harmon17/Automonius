@@ -228,6 +228,11 @@
     -fx-translate-y: -18; /* move label above field */
     -fx-font-size: 11px;
 }
+.arg-text-field.inactive-arg {
+    -fx-text-fill: gray;
+    -fx-font-style: italic;
+    -fx-opacity: 0.8;
+}
 
 
 

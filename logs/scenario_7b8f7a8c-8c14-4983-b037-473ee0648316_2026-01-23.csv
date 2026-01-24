@@ -1,0 +1,5 @@
+phase,timestamp,row,stepId,item,object,action,description,input,args,maxArgs
+Load,2026-01-23T20:42:45.859103,1,"ce84541e-6fa6-400f-bde6-c4f592c056e0","<empty>","Calculator","calculateTen","<empty>","<empty>","[, , , , , , , , , , ]",11
+Commit,2026-01-23T20:42:57.661994800,1,"68a26ed1-eec3-48b2-bf88-d127afa58b96","<empty>","Calculator","calculateTen","<empty>","<empty>","[, , , , , , , , , , ]",11
+Commit,2026-01-23T20:42:57.661994800,2,"52427a01-63f3-4c50-8b57-4a5b9d149612","<empty>","FileSystem","checkFileContainsKeyword","<empty>","<empty>","[, ]",2
+Commit,2026-01-23T20:42:57.661994800,3,"e5c86180-e018-43a8-8a05-1eaf7d6b1c24","<empty>","WebServer","sendRequest","<empty>","<empty>","[]",1

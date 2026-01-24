@@ -10,11 +10,12 @@ public class TestNode {
     private final NodeType type;
     private final String id;
 
-    // Optional references to backing model objects
+    // References to backing model objects
     private TestSuite suiteRef;
     private TestScenario scenarioRef;
-    private TestStep stepRef;   // ✅ add this
+    private TestStep stepRef;
 
+    // --- Constructor ---
     public TestNode(String name, NodeType type) {
         this.name = name;
         this.type = type;
@@ -22,17 +23,17 @@ public class TestNode {
         log.info(() -> "Created TestNode: id=" + id + ", name=" + name + ", type=" + type);
     }
 
-    // --- Getter/Setter for name ---
+    // --- Name ---
     public String getName() { return name; }
     public void setName(String name) {
         log.fine(() -> "Renaming node " + id + " from " + this.name + " to " + name);
         this.name = name;
     }
 
-    // --- Getter for type ---
+    // --- Type ---
     public NodeType getType() { return type; }
 
-    // --- Getter for unique ID ---
+    // --- ID ---
     public String getId() { return id; }
 
     // --- Suite reference ---
@@ -58,7 +59,7 @@ public class TestNode {
     public void setStepRef(TestStep stepRef) {
         this.stepRef = stepRef;
         if (stepRef != null) {
-            log.info(() -> "Linked TestStep " + stepRef.getItem() + " to node " + id);
+            log.info(() -> "Linked TestStep " + stepRef.getId() + " to node " + id);
         }
     }
 
@@ -68,12 +69,11 @@ public class TestNode {
     }
 }
 
-
+// --- Enum for node types ---
 enum NodeType {
     ROOT,
     SUITE,
     SUB_SUITE,
     TEST_SCENARIO,
-    TEST_STEP   // ✅ add this
+    TEST_STEP
 }
-

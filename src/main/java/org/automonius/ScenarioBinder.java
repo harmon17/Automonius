@@ -17,22 +17,38 @@ public class ScenarioBinder {
         treeView.getSelectionModel().selectedItemProperty().addListener((obs, oldVal, newVal) -> {
             if (newVal != null) {
                 TestNode node = newVal.getValue();
-                if (node.getType() == NodeType.TEST_SCENARIO) {
-                    loadTestScenario(node.getName());
-                } else {
-                    tableView.getItems().clear();
+
+                switch (node.getType()) {
+                    case SUITE -> loadSuite(node.getSuiteRef());
+                    case TEST_SCENARIO -> loadScenario(node.getScenarioRef());
+                    case TEST_STEP -> loadSingleStep(node.getStepRef());
+                    default -> tableView.getItems().clear();
                 }
             }
         });
     }
 
-    private void loadTestScenario(String scenarioName) {
+    // --- Load all scenarios in a suite ---
+    private void loadSuite(TestSuite suite) {
         tableView.getItems().clear();
-        tableView.getItems().addAll(
-                new TestStep("", "Navigate", "HomePage", ""),
-                new TestStep("", "Click", "LoginButton", ""),
-                new TestStep("", "Enter", "PasswordField", "secret")
-        );
+        if (suite != null) {
+            suite.getScenarios().forEach(scenario -> tableView.getItems().addAll(scenario.getSteps()));
+        }
+    }
+
+    // --- Load all steps in a scenario ---
+    private void loadScenario(TestScenario scenario) {
+        tableView.getItems().clear();
+        if (scenario != null) {
+            tableView.getItems().addAll(scenario.getSteps());
+        }
+    }
+
+    // --- Load a single step ---
+    private void loadSingleStep(TestStep step) {
+        tableView.getItems().clear();
+        if (step != null) {
+            tableView.getItems().add(step);
+        }
     }
 }
-

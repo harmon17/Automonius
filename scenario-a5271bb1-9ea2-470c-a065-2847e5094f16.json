@@ -1,0 +1,175 @@
+{
+  "id": "a5271bb1-9ea2-470c-a065-2847e5094f16",
+  "name": "Scenario",
+  "steps": [
+    {
+      "id": "8a0a01e4-5f3e-4a28-bc07-0ade635c5c0a",
+      "item": "",
+      "action": "calculateTen",
+      "object": "Calculator",
+      "input": "",
+      "description": "",
+      "maxArgs": 11,
+      "extras": {
+        "num9": "StringProperty [value: ]",
+        "num8": "StringProperty [value: ]",
+        "num10": "StringProperty [value: ]",
+        "num7": "StringProperty [value: ]",
+        "num6": "StringProperty [value: ]",
+        "num1": "StringProperty [value: ]",
+        "num5": "StringProperty [value: ]",
+        "num4": "StringProperty [value: ]",
+        "operation": "StringProperty [value: ]",
+        "num3": "StringProperty [value: ]",
+        "num2": "StringProperty [value: ]"
+      }
+    },
+    {
+      "id": "d5c02eac-5790-4737-b345-f555e0d99ee0",
+      "item": "",
+      "action": "calculateTen",
+      "object": "Calculator",
+      "input": "",
+      "description": "",
+      "maxArgs": 11,
+      "extras": {
+        "num9": "StringProperty [value: ]",
+        "num8": "StringProperty [value: ]",
+        "num10": "StringProperty [value: ]",
+        "num7": "StringProperty [value: ]",
+        "num6": "StringProperty [value: ]",
+        "num1": "StringProperty [value: ]",
+        "num5": "StringProperty [value: ]",
+        "num4": "StringProperty [value: ]",
+        "operation": "StringProperty [value: ]",
+        "num3": "StringProperty [value: ]",
+        "num2": "StringProperty [value: ]"
+      }
+    },
+    {
+      "id": "e8d744cc-1f25-4b6a-a270-aed9c396c731",
+      "item": "",
+      "action": "checkFileContainsKeyword",
+      "object": "FileSystem",
+      "input": "",
+      "description": "",
+      "maxArgs": 13,
+      "extras": {
+        "num9": "StringProperty [value: ]",
+        "num8": "StringProperty [value: ]",
+        "num10": "StringProperty [value: ]",
+        "num7": "StringProperty [value: ]",
+        "num6": "StringProperty [value: ]",
+        "path": "StringProperty [value: ]",
+        "num1": "StringProperty [value: ]",
+        "keyword": "StringProperty [value: ]",
+        "num5": "StringProperty [value: ]",
+        "num4": "StringProperty [value: ]",
+        "operation": "StringProperty [value: ]",
+        "num3": "StringProperty [value: ]",
+        "num2": "StringProperty [value: ]"
+      }
+    },
+    {
+      "id": "f72bf2e0-ee20-44eb-9a17-f8663c968cd7",
+      "item": "",
+      "action": "calculateTen",
+      "object": "Calculator",
+      "input": "",
+      "description": "",
+      "maxArgs": 11,
+      "extras": {
+        "num9": "StringProperty [value: ]",
+        "num8": "StringProperty [value: ]",
+        "num10": "StringProperty [value: ]",
+        "num7": "StringProperty [value: ]",
+        "num6": "StringProperty [value: ]",
+        "num1": "StringProperty [value: ]",
+        "num5": "StringProperty [value: ]",
+        "num4": "StringProperty [value: ]",
+        "operation": "StringProperty [value: ]",
+        "num3": "StringProperty [value: ]",
+        "num2": "StringProperty [value: ]"
+      }
+    },
+    {
+      "id": "70238aea-be56-4fdf-8c8c-d82a6d84fbd6",
+      "item": "",
+      "action": "calculateTen",
+      "object": "Calculator",
+      "input": "",
+      "description": "",
+      "maxArgs": 11,
+      "extras": {
+        "num9": "StringProperty [value: ]",
+        "num8": "StringProperty [value: ]",
+        "num10": "StringProperty [value: ]",
+        "num7": "StringProperty [value: ]",
+        "num6": "StringProperty [value: ]",
+        "num1": "StringProperty [value: ]",
+        "num5": "StringProperty [value: ]",
+        "num4": "StringProperty [value: ]",
+        "operation": "StringProperty [value: ]",
+        "num3": "StringProperty [value: ]",
+        "num2": "StringProperty [value: ]"
+      }
+    },
+    {
+      "id": "0c0ac1c1-1fb2-43f5-9360-10e175209265",
+      "item": "",
+      "action": "calculateTen",
+      "object": "Calculator",
+      "input": "",
+      "description": "",
+      "maxArgs": 11,
+      "extras": {
+        "num9": "StringProperty [value: ]",
+        "num8": "StringProperty [value: ]",
+        "num10": "StringProperty [value: ]",
+        "num7": "StringProperty [value: ]",
+        "num6": "StringProperty [value: ]",
+        "num1": "StringProperty [value: ]",
+        "num5": "StringProperty [value: ]",
+        "num4": "StringProperty [value: ]",
+        "operation": "StringProperty [value: ]",
+        "num3": "StringProperty [value: ]",
+        "num2": "StringProperty [value: ]"
+      }
+    },
+    {
+      "id": "a6058be6-ed1b-4152-8408-cf6085e1e5a8",
+      "item": "",
+      "action": "calculateTen",
+      "object": "Calculator",
+      "input": "",
+      "description": "",
+      "maxArgs": 11,
+      "extras": {
+        "num9": "StringProperty [value: ]",
+        "num8": "StringProperty [value: ]",
+        "num10": "StringProperty [value: ]",
+        "num7": "StringProperty [value: ]",
+        "num6": "StringProperty [value: ]",
+        "num1": "StringProperty [value: ]",
+        "num5": "StringProperty [value: ]",
+        "num4": "StringProperty [value: ]",
+        "operation": "StringProperty [value: ]",
+        "num3": "StringProperty [value: ]",
+        "num2": "StringProperty [value: ]"
+      }
+    }
+  ],
+  "argLabels": [
+    "num1",
+    "num2",
+    "num3",
+    "num4",
+    "num5",
+    "num6",
+    "num7",
+    "num8",
+    "num9",
+    "num10",
+    "operation"
+  ]
+}
