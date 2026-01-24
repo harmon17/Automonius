@@ -22,12 +22,12 @@ public class TestStep {
     private final SimpleStringProperty input;
     private final SimpleStringProperty description;
 
-    // NEW: properties required by MainController
     private final SimpleStringProperty type;
     private final SimpleStringProperty status;
 
     private final Map<String, SimpleStringProperty> extras = new LinkedHashMap<>();
     private int maxArgs = 0;
+    private boolean isNew = false;
 
     // --- Constructors ---
 
@@ -43,7 +43,6 @@ public class TestStep {
         this.input = new SimpleStringProperty(input == null ? "" : input);
         this.description = new SimpleStringProperty("");
 
-        // default values for new properties
         this.type = new SimpleStringProperty("Step");
         this.status = new SimpleStringProperty("");
     }
@@ -59,7 +58,12 @@ public class TestStep {
         this.maxArgs = tc.getInputs().size();
     }
 
-    // Copy constructor
+
+    // --- New flag accessors ---
+    public boolean isNew() { return isNew; }
+    public void setNew(boolean value) { this.isNew = value; }
+
+    // Copy constructor: deep copy with values
     public TestStep(TestStep original) {
         this.id = UUID.randomUUID().toString();
         this.item = new SimpleStringProperty(original.getItem());
@@ -74,11 +78,32 @@ public class TestStep {
 
         if (original.getExtras() != null) {
             original.getExtras().forEach((k, v) -> {
-                SimpleStringProperty prop = new SimpleStringProperty(v.get());
+                SimpleStringProperty prop = new SimpleStringProperty(v.get()); // preserve value
                 attachDirtyListener(prop, k);
                 this.extras.put(k, prop);
             });
         }
+    }
+
+    // Explicit helper: copy with values (same as constructor)
+    public static TestStep copyWithValues(TestStep original) {
+        return new TestStep(original);
+    }
+
+    // Explicit helper: copy with blank extras (for AddRow)
+    public static TestStep copyWithBlankExtras(TestStep template) {
+        TestStep step = new TestStep();
+        step.setObject(template.getObject());
+        step.setAction(template.getAction());
+        step.setDescription(template.getDescription());
+        step.setMaxArgs(template.getMaxArgs());
+        step.setType(template.getType());
+        step.setStatus(template.getStatus());
+
+        template.getExtras().forEach((k, v) -> {
+            step.setExtra(k, ""); // always blank
+        });
+        return step;
     }
 
     // --- ID ---
@@ -131,7 +156,7 @@ public class TestStep {
         extras.clear();
         if (newExtras != null) {
             newExtras.forEach((key, prop) -> {
-                SimpleStringProperty copy = new SimpleStringProperty(prop.get());
+                SimpleStringProperty copy = new SimpleStringProperty(prop.get()); // preserve value
                 attachDirtyListener(copy, key);
                 extras.put(key, copy);
             });
@@ -167,14 +192,20 @@ public class TestStep {
             System.out.printf("Edited arg=%s, newValue=%s%n", key, newVal);
         });
     }
+
     // --- Args helper ---
     public List<String> getArgs() {
-        if (extras == null || extras.isEmpty()) {
+        if (extras.isEmpty()) {
             return List.of();
         }
         return extras.values().stream()
                 .map(SimpleStringProperty::get)
                 .toList();
     }
+
+
+
+
+
 
 }

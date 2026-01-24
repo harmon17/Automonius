@@ -440,6 +440,9 @@ public class MainController {
 
                     if (empty || step == null) {
                         setStyle("");
+                    } else if (step.isNew()) {
+                        // Highlight new rows until explicitly cleared
+                        setStyle("-fx-background-color: #d6f5ff; -fx-font-weight: bold;");
                     } else {
                         String status = step.getStatus();
                         if ("PASS".equalsIgnoreCase(status)) {
@@ -455,7 +458,6 @@ public class MainController {
                 }
             };
 
-            // Force selection when clicking anywhere in the row
             row.setOnMouseClicked(event -> {
                 if (!row.isEmpty()) {
                     tableView.getSelectionModel().select(row.getItem());
@@ -464,6 +466,7 @@ public class MainController {
 
             return row;
         });
+
 
 // --- ListView cell factory: editable args + commit on focus loss + highlight ---
         resolvedVariableList.setCellFactory(list -> new TextFieldListCell<>(new DefaultStringConverter()) {
@@ -652,6 +655,9 @@ public class MainController {
             updateExecutionPreview("⚠️ No step selected to run.");
             return;
         }
+
+        // 🔥 Clear the "new" flag once the step is executed
+        selectedStep.setNew(false);
 
         // Show annotation inputs and extras for debugging
         String[] inputs = getInputsForAction(selectedStep.getAction());
@@ -1572,29 +1578,22 @@ public class MainController {
             return;
         }
 
-        TestStep newStep = new TestStep();
+        TestStep newStep;
         int selectedIndex = tableView.getSelectionModel().getSelectedIndex();
 
         if (selectedIndex >= 0) {
-            // Copy from currently selected step
+            // Copy selected step’s metadata, but blank extras
             TestStep currentStep = tableView.getItems().get(selectedIndex);
-            newStep.setObject(currentStep.getObject());
-            newStep.setAction(currentStep.getAction());
-            newStep.setExtras(copyExtras(currentStep.getExtras()));
-            newStep.setMaxArgs(currentStep.getMaxArgs());
+            newStep = TestStep.copyWithBlankExtras(currentStep);
         } else {
-            // Context-aware defaults
             TestScenario scenario = selected.getValue().getScenarioRef();
-
-            // Prefer the last step in this scenario as a template
             if (!scenario.getSteps().isEmpty()) {
+                // Copy last step’s metadata, but blank extras
                 TestStep lastStep = scenario.getSteps().get(scenario.getSteps().size() - 1);
-                newStep.setObject(lastStep.getObject());
-                newStep.setAction(lastStep.getAction());
-                newStep.setExtras(copyExtras(lastStep.getExtras()));
-                newStep.setMaxArgs(lastStep.getMaxArgs());
+                newStep = TestStep.copyWithBlankExtras(lastStep);
             } else {
-                // Fall back to global discovery maps
+                // Fall back to global defaults
+                newStep = new TestStep();
                 String defaultObject = actionsByObject.keySet().stream().findFirst().orElse("");
                 newStep.setObject(defaultObject);
 
@@ -1606,7 +1605,7 @@ public class MainController {
                 Map<String, SimpleStringProperty> extras = defaultArgs.stream()
                         .collect(Collectors.toMap(
                                 arg -> arg,
-                                arg -> new SimpleStringProperty(""),
+                                arg -> new SimpleStringProperty(""), // blank
                                 (a, b) -> a,
                                 LinkedHashMap::new
                         ));
@@ -1615,17 +1614,26 @@ public class MainController {
             }
         }
 
+        // 🔥 Mark the new step as "new" so rowFactory highlights it
+        newStep.setNew(true);
+
+        // Add to table and auto-select so tester sees it immediately
         tableView.getItems().add(newStep);
+        tableView.getSelectionModel().select(newStep);
 
         TestScenario scenario = selected.getValue().getScenarioRef();
         if (scenario != null) {
-            scenario.getSteps().add(new TestStep(newStep)); // deep copy
+            // Preserve values when saving scenario snapshot
+            scenario.getSteps().add(new TestStep(newStep));
             refreshScenarioUI(scenario);
         }
 
         tableDirty = true;
         log.info(() -> "Added new step to scenario " + scenario.getId() + ": " + newStep);
     }
+
+
+
 
     // Helper to copy extras
     private Map<String, SimpleStringProperty> copyExtras(Map<String, SimpleStringProperty> original) {
@@ -2231,12 +2239,16 @@ public class MainController {
                     ));
             step.setExtras(extras);
             step.setMaxArgs(args.size());
+
+            // 🔥 Optional: clear "new" flag on refresh
+            step.setNew(false);
         }
 
         // Safeguard + sync ListView
         safeguardScenario(scenario);
         syncScenarioToContext(scenario);
     }
+
     private TableCell<TestStep, String> buildObjectComboCell() {
         return new TableCell<>() {
             @Override
