@@ -314,6 +314,8 @@ public class MainController {
         treeView.getSelectionModel().selectedItemProperty().addListener((obs, oldItem, newItem) -> {
             // ✅ Keep commit snapshot logging + UUID assignment
             if (oldItem != null && oldItem.getValue().getType() == NodeType.TEST_SCENARIO && MainController.isTableDirty()) {
+                commitActiveEdits(); // 🔥 flush edits before snapshot
+
                 TestScenario oldScenario = oldItem.getValue().getScenarioRef();
                 if (oldScenario != null) {
                     ObservableList<TestStep> committedSteps = FXCollections.observableArrayList();
@@ -343,6 +345,7 @@ public class MainController {
                 }
             }
         });
+
 
         // --- ListView setup ---
         resolvedVariableList.setEditable(true);
@@ -440,24 +443,39 @@ public class MainController {
 
                     if (empty || step == null) {
                         setStyle("");
-                    } else if (step.isNew()) {
-                        // Highlight new rows until explicitly cleared
-                        setStyle("-fx-background-color: #d6f5ff; -fx-font-weight: bold;");
+                        setContextMenu(null); // no menu for empty rows
                     } else {
-                        String status = step.getStatus();
-                        if ("PASS".equalsIgnoreCase(status)) {
-                            setStyle("-fx-background-color: #e6ffe6; -fx-text-fill: green; -fx-font-weight: bold;");
-                        } else if ("FAIL".equalsIgnoreCase(status)) {
-                            setStyle("-fx-background-color: #ffe6e6; -fx-text-fill: red; -fx-font-weight: bold;");
-                        } else if (status == null || status.isBlank() || "PENDING".equalsIgnoreCase(status)) {
-                            setStyle("-fx-background-color: #f2f2f2; -fx-text-fill: gray; -fx-font-style: italic;");
+                        // ✅ Existing status styling
+                        if (step.isNew()) {
+                            setStyle("-fx-background-color: #d6f5ff; -fx-font-weight: bold;");
                         } else {
-                            setStyle("-fx-background-color: #fff5e6; -fx-text-fill: orange; -fx-font-weight: bold;");
+                            String status = step.getStatus();
+                            if ("PASS".equalsIgnoreCase(status)) {
+                                setStyle("-fx-background-color: #e6ffe6; -fx-text-fill: green; -fx-font-weight: bold;");
+                            } else if ("FAIL".equalsIgnoreCase(status)) {
+                                setStyle("-fx-background-color: #ffe6e6; -fx-text-fill: red; -fx-font-weight: bold;");
+                            } else if (status == null || status.isBlank() || "PENDING".equalsIgnoreCase(status)) {
+                                setStyle("-fx-background-color: #f2f2f2; -fx-text-fill: gray; -fx-font-style: italic;");
+                            } else {
+                                setStyle("-fx-background-color: #fff5e6; -fx-text-fill: orange; -fx-font-weight: bold;");
+                            }
                         }
+
+                        // ✅ Context menu for right‑click
+                        ContextMenu menu = new ContextMenu();
+                        MenuItem runItem = new MenuItem("Run Step");
+                        runItem.setOnAction(e -> {
+                            tableView.getSelectionModel().select(step); // ensure selection
+                            handleRun(new ActionEvent());               // reuse your existing run logic
+                        });
+                        menu.getItems().add(runItem);
+
+                        setContextMenu(menu);
                     }
                 }
             };
 
+            // Left‑click still selects row
             row.setOnMouseClicked(event -> {
                 if (!row.isEmpty()) {
                     tableView.getSelectionModel().select(row.getItem());
@@ -466,6 +484,7 @@ public class MainController {
 
             return row;
         });
+
 
 
 // --- ListView cell factory: editable args + commit on focus loss + highlight ---
@@ -2377,6 +2396,17 @@ public class MainController {
         }
 
         executionPreviewFlow.getChildren().add(logLine);
+    }
+    // Add this inside MainController class
+    private void commitActiveEdits() {
+        // End any active TableView edit
+        if (tableView.getEditingCell() != null) {
+            tableView.edit(-1, null);
+        }
+        // End any active ListView edit
+        if (resolvedVariableList.getEditingIndex() >= 0) {
+            resolvedVariableList.edit(-1);
+        }
     }
 
 
