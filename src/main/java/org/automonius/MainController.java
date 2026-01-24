@@ -5,6 +5,7 @@ import java.net.URL;
 import java.util.*;
 
 import com.google.gson.*;
+import javafx.animation.PauseTransition;
 import javafx.beans.property.ReadOnlyStringWrapper;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.collections.FXCollections;
@@ -21,6 +22,7 @@ import javafx.scene.image.ImageView;
 import javafx.scene.input.*;
 import javafx.scene.layout.*;
 import javafx.stage.FileChooser;
+import javafx.util.Duration;
 import javafx.util.converter.DefaultStringConverter;
 import org.apache.poi.ss.usermodel.DataFormatter;
 import org.apache.poi.ss.usermodel.Row;
@@ -421,27 +423,89 @@ public class MainController {
         });
 
         // --- Row-level styling based on step status ---
-        tableView.setRowFactory(tv -> new TableRow<>() {
-            @Override
-            protected void updateItem(TestStep step, boolean empty) {
-                super.updateItem(step, empty);
+        // --- TableView row factory: selection + status styling ---
+        tableView.setRowFactory(tv -> {
+            TableRow<TestStep> row = new TableRow<>() {
+                @Override
+                protected void updateItem(TestStep step, boolean empty) {
+                    super.updateItem(step, empty);
 
-                if (empty || step == null) {
-                    setStyle("");
-                } else {
-                    String status = step.getStatus();
-                    if ("PASS".equalsIgnoreCase(status)) {
-                        setStyle("-fx-background-color: #e6ffe6; -fx-text-fill: green; -fx-font-weight: bold;");
-                    } else if ("FAIL".equalsIgnoreCase(status)) {
-                        setStyle("-fx-background-color: #ffe6e6; -fx-text-fill: red; -fx-font-weight: bold;");
-                    } else if (status == null || status.isBlank() || "PENDING".equalsIgnoreCase(status)) {
-                        setStyle("-fx-background-color: #f2f2f2; -fx-text-fill: gray; -fx-font-style: italic;");
+                    if (empty || step == null) {
+                        setStyle("");
                     } else {
-                        setStyle("-fx-background-color: #fff5e6; -fx-text-fill: orange; -fx-font-weight: bold;");
+                        String status = step.getStatus();
+                        if ("PASS".equalsIgnoreCase(status)) {
+                            setStyle("-fx-background-color: #e6ffe6; -fx-text-fill: green; -fx-font-weight: bold;");
+                        } else if ("FAIL".equalsIgnoreCase(status)) {
+                            setStyle("-fx-background-color: #ffe6e6; -fx-text-fill: red; -fx-font-weight: bold;");
+                        } else if (status == null || status.isBlank() || "PENDING".equalsIgnoreCase(status)) {
+                            setStyle("-fx-background-color: #f2f2f2; -fx-text-fill: gray; -fx-font-style: italic;");
+                        } else {
+                            setStyle("-fx-background-color: #fff5e6; -fx-text-fill: orange; -fx-font-weight: bold;");
+                        }
                     }
                 }
+            };
+
+            // Force selection when clicking anywhere in the row
+            row.setOnMouseClicked(event -> {
+                if (!row.isEmpty()) {
+                    tableView.getSelectionModel().select(row.getItem());
+                }
+            });
+
+            return row;
+        });
+
+// --- ListView cell factory: editable args + commit on focus loss + highlight ---
+        resolvedVariableList.setCellFactory(list -> new TextFieldListCell<>(new DefaultStringConverter()) {
+            @Override
+            public void updateItem(String item, boolean empty) {
+                super.updateItem(item, empty);
+                if (empty || item == null) {
+                    setText(null);
+                    setEditable(false);
+                    return;
+                }
+                if (!item.trim().startsWith("--")) {
+                    setText(item);
+                    setStyle("-fx-font-weight: bold; -fx-text-fill: #2a2a2a;");
+                    setEditable(false);
+                } else {
+                    setText(item);
+                    setStyle("");
+                    setEditable(true);
+                }
+            }
+
+            @Override
+            public void startEdit() {
+                super.startEdit();
+                if (getGraphic() instanceof TextField tf) {
+                    // Commit when focus leaves the text field
+                    tf.focusedProperty().addListener((obs, wasFocused, isNowFocused) -> {
+                        if (!isNowFocused) {
+                            commitEdit(tf.getText());
+                        }
+                    });
+                }
+            }
+
+            @Override
+            public void commitEdit(String newValue) {
+                super.commitEdit(newValue);
+
+                // 🔥 Highlight effect after commit
+                setStyle("-fx-background-color: #d6f5ff; -fx-font-weight: bold;");
+
+                // Optional fade back after 2 seconds
+                PauseTransition pause = new PauseTransition(Duration.seconds(2));
+                pause.setOnFinished(e -> setStyle(""));
+                pause.play();
             }
         });
+
+
 
 
     }
@@ -1862,21 +1926,22 @@ public class MainController {
     }
 
     @FXML
-    private void handleRunSuite() {
-        TreeItem<TestNode> selected = treeView.getSelectionModel().getSelectedItem();
-        if (selected == null || selected.getValue().getType() != NodeType.TEST_SCENARIO) {
+    private void handleRun() {
+        TreeItem<TestNode> selectedNode = treeView.getSelectionModel().getSelectedItem();
+        if (selectedNode == null || selectedNode.getValue().getType() != NodeType.TEST_SCENARIO) {
             updateExecutionPreview("⚠️ Please select a Test Scenario to run.");
             return;
         }
 
-        TestScenario scenario = selected.getValue().getScenarioRef();
+        TestScenario scenario = selectedNode.getValue().getScenarioRef();
         if (scenario == null) {
             updateExecutionPreview("No scenario linked to this node.");
             return;
         }
 
-        runScenario(scenario);
+        runScenario(scenario); // always run the whole scenario
     }
+
 
 
     private void runScenario(TestScenario scenario) {
@@ -2060,7 +2125,21 @@ public class MainController {
                     setEditable(true);
                 }
             }
+
+            @Override
+            public void startEdit() {
+                super.startEdit();
+                if (getGraphic() instanceof TextField tf) {
+                    // Commit when focus leaves the text field
+                    tf.focusedProperty().addListener((obs, wasFocused, isNowFocused) -> {
+                        if (!isNowFocused) {
+                            commitEdit(tf.getText());
+                        }
+                    });
+                }
+            }
         });
+
 
         // Handle edits only for args
         resolvedVariableList.setOnEditCommit(event -> {
@@ -2072,18 +2151,41 @@ public class MainController {
                 String varName = parts[0];
                 String varValue = parts[1];
 
+                // Update context variables
                 Map<String, String> ctxVars = contextVariables.get(contextKey);
                 if (ctxVars != null) ctxVars.put(varName, varValue);
 
-                tableView.getItems().forEach(step -> {
-                    if (step.getExtras().containsKey(varName)) {
-                        step.getExtraProperty(varName).set(varValue);
-                    }
-                });
+                // Update selected step extras
+                TestStep selectedStep = tableView.getSelectionModel().getSelectedItem();
+                if (selectedStep != null) {
+                    selectedStep.getExtraProperty(varName).set(varValue);
+                }
 
+                // Update ListView item
                 resolvedVariableList.getItems().set(event.getIndex(), newValue);
+
+                // --- Execution Preview log ---
+                executionPreviewArea.appendText(
+                        "\n✎ Arg updated → step=" +
+                                (selectedStep != null ? selectedStep.getId() : "unknown") +
+                                ", var=" + varName + ", value=" + varValue
+                );
+
+                // --- Payload Preview refresh ---
+                StringBuilder payloadBuilder = new StringBuilder();
+                if (selectedStep != null) {
+                    selectedStep.getExtras().forEach((k, v) -> {
+                        payloadBuilder.append("--").append(k).append("=")
+                                .append(v.get()).append("\n");
+                    });
+                }
+                resolvedPayloadArea.setText(payloadBuilder.toString().trim());
             }
         });
+
+
+
+
     }
 
 
@@ -2198,7 +2300,6 @@ public class MainController {
             }
         };
     }
-
 
 
 
