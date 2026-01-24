@@ -21,6 +21,7 @@ import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.scene.input.*;
 import javafx.scene.layout.*;
+import javafx.scene.paint.Color;
 import javafx.stage.FileChooser;
 import javafx.util.Duration;
 import javafx.util.converter.DefaultStringConverter;
@@ -43,6 +44,10 @@ import java.util.logging.Logger;
 import java.util.stream.Collectors;
 
 import javafx.scene.control.cell.TextFieldListCell;
+import javafx.scene.text.Text;
+import javafx.scene.text.TextFlow;
+import javafx.scene.paint.Color;
+
 
 
 public class MainController {
@@ -79,7 +84,7 @@ public class MainController {
     @FXML
     private final DataFormatter formatter = new DataFormatter();
     @FXML
-    private TextArea executionPreviewArea;
+//    private TextArea executionPreviewArea;
     private static final Logger log = Logger.getLogger(MainController.class.getName());
     @FXML
     private CheckBox showStepsToggle;
@@ -106,6 +111,9 @@ public class MainController {
     private TextArea lastPayloadArea;
     private final Map<String, List<String>> argsByAction = new HashMap<>();   // action → inputs
     private final Map<String, List<String>> actionsByObject = new HashMap<>();
+    @FXML private TextFlow executionPreviewFlow;
+
+
 
 
     @FXML
@@ -893,12 +901,17 @@ public class MainController {
     }
 
 
+
+
     private void updateExecutionPreview(String message) {
-        if (executionPreviewArea != null) {
-            executionPreviewArea.appendText("Preview: " + message + "\n");
+        if (executionPreviewFlow != null) {
+            Text logLine = new Text("Preview: " + message + "\n");
+            logLine.setFill(Color.GRAY); // default color
+            executionPreviewFlow.getChildren().add(logLine);
         }
         log.info(() -> "Execution preview updated: " + message);
     }
+
 
 
     @FXML
@@ -1918,12 +1931,29 @@ public class MainController {
         String resolved = resolvePayload(rawPayload);
 
         lastPayloadArea.setText(resolved); // show payload
-        executionPreviewArea.appendText("Running step: " + step.getAction() + "\n");
+
+        // Running step log (blue)
+        Text runLine = new Text("Running step: " + step.getAction() + "\n");
+        runLine.setFill(Color.DODGERBLUE);
+        runLine.setStyle("-fx-font-weight: bold;");
+        executionPreviewFlow.getChildren().add(runLine);
 
         Object result = TestExecutor.runTest(step);
 
-        executionPreviewArea.appendText("Result: " + result + "\n\n");
+        // Result log (green for PASS, red for FAIL, gray otherwise)
+        Text resultLine = new Text("Result: " + result + "\n\n");
+        if ("PASS".equalsIgnoreCase(String.valueOf(result))) {
+            resultLine.setFill(Color.GREEN);
+            resultLine.setStyle("-fx-font-weight: bold;");
+        } else if ("FAIL".equalsIgnoreCase(String.valueOf(result))) {
+            resultLine.setFill(Color.RED);
+            resultLine.setStyle("-fx-font-weight: bold;");
+        } else {
+            resultLine.setFill(Color.GRAY);
+        }
+        executionPreviewFlow.getChildren().add(resultLine);
     }
+
 
     @FXML
     private void handleRun() {
@@ -2151,27 +2181,22 @@ public class MainController {
                 String varName = parts[0];
                 String varValue = parts[1];
 
-                // Update context variables
                 Map<String, String> ctxVars = contextVariables.get(contextKey);
                 if (ctxVars != null) ctxVars.put(varName, varValue);
 
-                // Update selected step extras
                 TestStep selectedStep = tableView.getSelectionModel().getSelectedItem();
                 if (selectedStep != null) {
                     selectedStep.getExtraProperty(varName).set(varValue);
                 }
 
-                // Update ListView item
                 resolvedVariableList.getItems().set(event.getIndex(), newValue);
 
-                // --- Execution Preview log ---
-                executionPreviewArea.appendText(
-                        "\n✎ Arg updated → step=" +
-                                (selectedStep != null ? selectedStep.getId() : "unknown") +
-                                ", var=" + varName + ", value=" + varValue
-                );
+                // 🔥 Color‑coded log line
+                logExecutionEvent("ARG", "step=" +
+                        (selectedStep != null ? selectedStep.getId() : "unknown") +
+                        ", var=" + varName + ", value=" + varValue);
 
-                // --- Payload Preview refresh ---
+                // Refresh payload preview
                 StringBuilder payloadBuilder = new StringBuilder();
                 if (selectedStep != null) {
                     selectedStep.getExtras().forEach((k, v) -> {
@@ -2182,6 +2207,7 @@ public class MainController {
                 resolvedPayloadArea.setText(payloadBuilder.toString().trim());
             }
         });
+
 
 
 
@@ -2301,7 +2327,35 @@ public class MainController {
         };
     }
 
+// Replace executionPreviewArea (TextArea) with a TextFlow in your FXML:
+// <TextFlow fx:id="executionPreviewFlow" />
 
+    private void logExecutionEvent(String type, String message) {
+        Text logLine = new Text();
+
+        switch (type.toUpperCase()) {
+            case "PASS":
+                logLine.setFill(Color.GREEN);
+                logLine.setStyle("-fx-font-weight: bold;");
+                logLine.setText("✔ PASS → " + message + "\n");
+                break;
+            case "FAIL":
+                logLine.setFill(Color.RED);
+                logLine.setStyle("-fx-font-weight: bold;");
+                logLine.setText("✘ FAIL → " + message + "\n");
+                break;
+            case "ARG":
+                logLine.setFill(Color.DODGERBLUE);
+                logLine.setStyle("-fx-font-weight: bold;");
+                logLine.setText("✎ Arg updated → " + message + "\n");
+                break;
+            default:
+                logLine.setFill(Color.GRAY);
+                logLine.setText(message + "\n");
+        }
+
+        executionPreviewFlow.getChildren().add(logLine);
+    }
 
 
 
