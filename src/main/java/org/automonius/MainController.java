@@ -667,6 +667,15 @@ public class MainController {
         // Run the test step
         Object resultObj = TestExecutor.runTest(selectedStep);
 
+        // 🔥 Map result to status so TreeView/TableView can style correctly
+        if (resultObj instanceof Boolean) {
+            selectedStep.setStatus((Boolean) resultObj ? "PASS" : "FAIL");
+        } else if (resultObj == null) {
+            selectedStep.setStatus("SKIPPED");
+        } else {
+            selectedStep.setStatus("ERROR");
+        }
+
         // Build a safe log map: include result and extras, skipping nulls
         Map<String, Object> logData = new LinkedHashMap<>();
         logData.put("result", resultObj);
@@ -684,6 +693,7 @@ public class MainController {
 
         logStepChange("Run", selectedStep, logData);
     }
+
 
 
     public static TestCase getTestByAction(Class<?> clazz, String actionName) {
