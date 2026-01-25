@@ -49,7 +49,6 @@ import javafx.scene.text.TextFlow;
 import javafx.scene.paint.Color;
 
 
-
 public class MainController {
     @FXML
     private TreeView<TestNode> treeView;
@@ -111,9 +110,8 @@ public class MainController {
     private TextArea lastPayloadArea;
     private final Map<String, List<String>> argsByAction = new HashMap<>();   // action → inputs
     private final Map<String, List<String>> actionsByObject = new HashMap<>();
-    @FXML private TextFlow executionPreviewFlow;
-
-
+    @FXML
+    private TextFlow executionPreviewFlow;
 
 
     @FXML
@@ -174,51 +172,55 @@ public class MainController {
         TreeItem<TestNode> root = new TreeItem<>(new TestNode("Directory Structure", NodeType.ROOT));
         root.setExpanded(true);
         treeView.setRoot(root);
-        // --- Copy/Paste shortcuts ---
+
+        // --- Clipboard setup ---
         final Clipboard clipboard = Clipboard.getSystemClipboard();
         final ClipboardContent clipboardContent = new ClipboardContent();
+
 
         treeView.setOnKeyPressed(event -> {
             TreeItem<TestNode> selected = treeView.getSelectionModel().getSelectedItem();
             if (selected == null) return;
 
             if (event.isControlDown() && event.getCode() == KeyCode.C) {
-                if (selected.getValue().getType() == NodeType.SUITE) {
-                    clipboardContent.putString("SUITE:" + selected.getValue().getSuiteRef().getId());
-                    clipboard.setContent(clipboardContent);
-                } else if (selected.getValue().getType() == NodeType.TEST_SCENARIO) {
-                    clipboardContent.putString("SCENARIO:" + selected.getValue().getScenarioRef().getId());
-                    clipboard.setContent(clipboardContent);
-                }
+                handleCopy(selected, clipboardContent);
             }
+
             if (event.isControlDown() && event.getCode() == KeyCode.V) {
-                String data = clipboard.getString();
-                if (data != null) {
-                    if (data.startsWith("SUITE:") && selected.getValue().getType() == NodeType.ROOT) {
-                        TestSuite original = selected.getValue().getSuiteRef();
-                        TestSuite copy = cloneSuite(original);
-                        TreeItem<TestNode> copyItem = buildSuiteNode(copy);
-                        selected.getChildren().add(copyItem);
-                    }
-                    if (data.startsWith("SCENARIO:") &&
-                            (selected.getValue().getType() == NodeType.SUITE || selected.getValue().getType() == NodeType.SUB_SUITE)) {
-                        TestScenario original = selected.getValue().getScenarioRef();
-                        TestScenario copy = cloneScenario(original);
-                        TreeItem<TestNode> copyItem = buildScenarioNode(copy);
-                        selected.getChildren().add(copyItem);
-                    }
-                }
+                String data = Clipboard.getSystemClipboard().getString();
+                if (data != null) handlePaste(selected, data);
             }
         });
 
-        // --- Context menu ---
+// --- Context menu ---
         ContextMenu contextMenu = new ContextMenu();
-        MenuItem copySuiteItem = new MenuItem("Copy Suite");
-        copySuiteItem.setOnAction(e -> { /* keep original copy suite logic */ });
-        MenuItem copyScenarioItem = new MenuItem("Copy Scenario");
-        copyScenarioItem.setOnAction(e -> { /* keep original copy scenario logic */ });
-        contextMenu.getItems().addAll(copySuiteItem, copyScenarioItem);
+
+        MenuItem copyMenuItem = new MenuItem("Copy");
+        copyMenuItem.setOnAction(e -> {
+            TreeItem<TestNode> selected = treeView.getSelectionModel().getSelectedItem();
+            if (selected != null) handleCopy(selected, clipboardContent);
+        });
+
+        MenuItem pasteMenuItem = new MenuItem("Paste");
+        pasteMenuItem.setOnAction(e -> {
+            TreeItem<TestNode> selected = treeView.getSelectionModel().getSelectedItem();
+            if (selected == null) return;
+            String data = Clipboard.getSystemClipboard().getString();
+            if (data != null) handlePaste(selected, data);
+        });
+
+        MenuItem renameMenuItem = new MenuItem("Rename");
+        renameMenuItem.setOnAction(e -> {
+            TreeItem<TestNode> selected = treeView.getSelectionModel().getSelectedItem();
+            if (selected != null) handleRename(selected);
+        });
+
+        contextMenu.getItems().addAll(copyMenuItem, pasteMenuItem, renameMenuItem);
         treeView.setContextMenu(contextMenu);
+
+
+
+
 
         // --- Drag and Drop setup ---
         treeView.setOnDragDetected(event -> { /* keep original drag logic */ });
@@ -486,7 +488,6 @@ public class MainController {
         });
 
 
-
 // --- ListView cell factory: editable args + commit on focus loss + highlight ---
         resolvedVariableList.setCellFactory(list -> new TextFieldListCell<>(new DefaultStringConverter()) {
             @Override
@@ -536,10 +537,7 @@ public class MainController {
         });
 
 
-
-
     }
-
 
 
     @FXML
@@ -655,7 +653,6 @@ public class MainController {
     }
 
 
-
     @FXML
     private void handleRun(ActionEvent event) {
         // End any active cell editing before running
@@ -712,7 +709,6 @@ public class MainController {
 
         logStepChange("Run", selectedStep, logData);
     }
-
 
 
     public static TestCase getTestByAction(Class<?> clazz, String actionName) {
@@ -936,8 +932,6 @@ public class MainController {
     }
 
 
-
-
     private void updateExecutionPreview(String message) {
         if (executionPreviewFlow != null) {
             Text logLine = new Text("Preview: " + message + "\n");
@@ -946,7 +940,6 @@ public class MainController {
         }
         log.info(() -> "Execution preview updated: " + message);
     }
-
 
 
     @FXML
@@ -1179,16 +1172,18 @@ public class MainController {
         }
     }
 
-    private TreeItem<TestNode> buildSuiteNode(TestSuite suite) {
+    private TreeItem<TestNode> buildSuiteNode(TestSuite suite, NodeType type) {
         String suiteName = (suite.getName() != null && !suite.getName().isBlank())
                 ? suite.getName()
                 : "Unnamed Suite";
 
-        TestNode suiteNode = new TestNode(suiteName, NodeType.SUITE);
+        // Use the type passed in (SUITE or SUB_SUITE)
+        TestNode suiteNode = new TestNode(suiteName, type);
         suiteNode.setSuiteRef(suite);
         TreeItem<TestNode> suiteItem = new TreeItem<>(suiteNode);
         suiteItem.setExpanded(true);
 
+        // Add scenarios
         for (TestScenario scenario : suite.getScenarios()) {
             String scenarioName = (scenario.getName() != null && !scenario.getName().isBlank())
                     ? scenario.getName()
@@ -1207,7 +1202,6 @@ public class MainController {
                             ? step.getDescription()
                             : step.getAction();
 
-                    // Add row numbering for clarity
                     String displayName = "Row " + rowIndex + ": " + (stepName != null ? stepName : "Unnamed Step");
 
                     TestNode stepNode = new TestNode(displayName, NodeType.TEST_STEP);
@@ -1223,70 +1217,66 @@ public class MainController {
 
         // Recursive sub-suites
         for (TestSuite subSuite : suite.getSubSuites()) {
-            suiteItem.getChildren().add(buildSuiteNode(subSuite));
+            suiteItem.getChildren().add(buildSuiteNode(subSuite, NodeType.SUB_SUITE));
         }
 
         return suiteItem;
     }
 
 
+
     private TestSuite cloneSuite(TestSuite original) {
-        TestSuite copy = new TestSuite(original.getName() + " Copy");
+        // keep the same name, no " Copy"
+        TestSuite copy = new TestSuite(UUID.randomUUID().toString(), original.getName());
 
         for (TestScenario scenario : original.getScenarios()) {
-            TestScenario scenarioCopy = cloneScenario(scenario);
-            copy.addScenario(scenarioCopy);
+            copy.addScenario(cloneScenario(scenario));
+        }
+        for (TestSuite subSuite : original.getSubSuites()) {
+            copy.addSubSuite(cloneSuite(subSuite));
         }
 
+        Map<String, String> originalVars = contextVariables.getOrDefault(original.getName(), Map.of());
+        contextVariables.put(copy.getName(), new HashMap<>(originalVars));
+
+        log.info(() -> "Cloned suite " + original.getName() + " → " + copy.getName());
         return copy;
     }
 
 
-    @FXML
-    private void handleCopySuite(ActionEvent event) {
-        TreeItem<TestNode> selected = treeView.getSelectionModel().getSelectedItem();
-        if (selected != null && selected.getValue().getType() == NodeType.SUITE) {
-            TestSuite original = selected.getValue().getSuiteRef();
-            if (original != null) {
-                TestSuite copyModel = cloneSuite(original);
-
-                TestNode copyNode = new TestNode(copyModel.getName(), NodeType.SUITE);
-                copyNode.setSuiteRef(copyModel);
-
-                TreeItem<TestNode> copyItem = new TreeItem<>(
-                        copyNode,
-                        makeIcon("/icons/MainSuite.png", 16, 16)
-                );
-                copyItem.setExpanded(true);
-
-                selected.getParent().getChildren().add(copyItem);
-
-                updateExecutionPreview("Copied suite: " + original.getName() +
-                        " → " + copyModel.getName() + " (id=" + copyModel.getId() + ")");
-            }
-        } else {
-            showError("Copy Suite can only be used on a Suite node.");
+    private void handleCopy(TreeItem<TestNode> selected, ClipboardContent clipboardContent) {
+        NodeType type = selected.getValue().getType();
+        if (type == NodeType.SUITE) {
+            clipboardContent.putString("SUITE:" + selected.getValue().getSuiteRef().getId());
+            Clipboard.getSystemClipboard().setContent(clipboardContent);
+            log.info(() -> "Suite " + selected.getValue().getSuiteRef().getName() + " copied");
+        } else if (type == NodeType.SUB_SUITE) {
+            clipboardContent.putString("SUBSUITE:" + selected.getValue().getSuiteRef().getId());
+            Clipboard.getSystemClipboard().setContent(clipboardContent);
+            log.info(() -> "SubSuite " + selected.getValue().getSuiteRef().getName() + " copied");
+        } else if (type == NodeType.TEST_SCENARIO) {
+            clipboardContent.putString("SCENARIO:" + selected.getValue().getScenarioRef().getId());
+            Clipboard.getSystemClipboard().setContent(clipboardContent);
+            log.info(() -> "TestScenario " + selected.getValue().getScenarioRef().getName() + " copied");
         }
     }
 
+
     private TestScenario cloneScenario(TestScenario original) {
-        // Use the new constructor so the blank step is seeded with defaults
-        TestScenario copy = new TestScenario(original.getName() + " Copy", argsByObject, actionsByObject);
-        copy.getSteps().clear(); // remove the seeded blank
+        // keep the same name, no " Copy"
+        TestScenario copy = new TestScenario(UUID.randomUUID().toString(), original.getName());
+
+        // use the TestStep copy constructor
         for (TestStep step : original.getSteps()) {
             copy.addStep(new TestStep(step));
         }
 
-        // Copy extras list
-        Map<String, SimpleStringProperty> extrasCopy = new LinkedHashMap<>();
-        original.getExtras().forEach((key, prop) -> {
-            extrasCopy.put(key, new SimpleStringProperty(prop.get())); // deep copy each property
-        });
-        copy.setExtras(extrasCopy);
-
-
+        log.info(() -> "Cloned scenario " + original.getName() + " → " + copy.getName() +
+                " with " + copy.getSteps().size() + " steps");
         return copy;
     }
+
+
 
 
     private TreeItem<TestNode> buildScenarioNode(TestScenario scenario) {
@@ -1379,6 +1369,15 @@ public class MainController {
         alert.setContentText(message);
         alert.showAndWait();
     }
+
+    private void showWarning(String message) {
+        Alert alert = new Alert(Alert.AlertType.WARNING);
+        alert.setTitle("Invalid Paste");
+        alert.setHeaderText(null);
+        alert.setContentText(message);
+        alert.showAndWait();
+    }
+
 
     private void addColumnForScenario(TreeItem<TestNode> scenario, String colName) {
         String key = makeKey(scenario);
@@ -1662,8 +1661,6 @@ public class MainController {
     }
 
 
-
-
     // Helper to copy extras
     private Map<String, SimpleStringProperty> copyExtras(Map<String, SimpleStringProperty> original) {
         return original.entrySet().stream()
@@ -1674,7 +1671,6 @@ public class MainController {
                         LinkedHashMap::new
                 ));
     }
-
 
 
     @FXML
@@ -2010,7 +2006,6 @@ public class MainController {
     }
 
 
-
     private void runScenario(TestScenario scenario) {
         updateExecutionPreview("▶ Running scenario '" + scenario.getName() + "'...");
 
@@ -2045,7 +2040,6 @@ public class MainController {
             log.log(Level.SEVERE, "Error running step " + rowIndex, ex);
         }
     }
-
 
 
     @FXML
@@ -2246,9 +2240,6 @@ public class MainController {
         });
 
 
-
-
-
     }
 
 
@@ -2323,6 +2314,7 @@ public class MainController {
             }
         };
     }
+
     private TableCell<TestStep, String> buildActionComboCell() {
         return new TableCell<>() {
             @Override
@@ -2397,6 +2389,7 @@ public class MainController {
 
         executionPreviewFlow.getChildren().add(logLine);
     }
+
     // Add this inside MainController class
     private void commitActiveEdits() {
         // End any active TableView edit
@@ -2408,6 +2401,131 @@ public class MainController {
             resolvedVariableList.edit(-1);
         }
     }
+
+    // --- Suite lookup by ID ---
+    private TestSuite findSuiteById(String id) {
+        return findSuiteRecursive(treeView.getRoot(), id);
+    }
+
+    private TestSuite findSuiteRecursive(TreeItem<TestNode> node, String id) {
+        if (node.getValue().getSuiteRef() != null &&
+                node.getValue().getSuiteRef().getId().equals(id)) {
+            return node.getValue().getSuiteRef();
+        }
+        for (TreeItem<TestNode> child : node.getChildren()) {
+            TestSuite result = findSuiteRecursive(child, id);
+            if (result != null) return result;
+        }
+        return null;
+    }
+
+    // --- Scenario lookup by ID ---
+    private TestScenario findScenarioById(String id) {
+        return findScenarioRecursive(treeView.getRoot(), id);
+    }
+
+    private TestScenario findScenarioRecursive(TreeItem<TestNode> node, String id) {
+        if (node.getValue().getScenarioRef() != null &&
+                node.getValue().getScenarioRef().getId().equals(id)) {
+            return node.getValue().getScenarioRef();
+        }
+        for (TreeItem<TestNode> child : node.getChildren()) {
+            TestScenario result = findScenarioRecursive(child, id);
+            if (result != null) return result;
+        }
+        return null;
+    }
+
+    // --- Paste helper ---
+    private void handlePaste(TreeItem<TestNode> selected, String data) {
+        NodeType parentType = selected.getValue().getType();
+
+        // --- Paste Suite ---
+        if (data.startsWith("SUITE:")) {
+            if (parentType != NodeType.ROOT) {
+                showWarning("Suites can only be pasted under Root.");
+                return;
+            }
+            String suiteId = data.substring("SUITE:".length());
+            TestSuite original = findSuiteById(suiteId);
+            if (original == null) return;
+
+            TestSuite copy = cloneSuite(original);
+            TreeItem<TestNode> copiedNode = buildSuiteNode(copy, NodeType.SUITE);
+            selected.getChildren().add(copiedNode);
+            treeView.getSelectionModel().select(copiedNode);
+        }
+
+        // --- Paste SubSuite ---
+        if (data.startsWith("SUBSUITE:")) {
+            if (parentType != NodeType.SUITE) {
+                showWarning("SubSuites can only be pasted under a Suite.");
+                return;
+            }
+            String suiteId = data.substring("SUBSUITE:".length());
+            TestSuite original = findSuiteById(suiteId);
+            if (original == null) return;
+
+            TestSuite copy = cloneSuite(original);
+            TreeItem<TestNode> copiedNode = buildSuiteNode(copy, NodeType.SUB_SUITE);
+            selected.getChildren().add(copiedNode);
+            treeView.getSelectionModel().select(copiedNode);
+        }
+
+        // --- Paste Scenario ---
+        if (data.startsWith("SCENARIO:")) {
+            if (parentType != NodeType.SUITE && parentType != NodeType.SUB_SUITE) {
+                showWarning("Scenarios can only be pasted under a Suite or SubSuite.");
+                return;
+            }
+            String scenarioId = data.substring("SCENARIO:".length());
+            TestScenario original = findScenarioById(scenarioId);
+            if (original == null) return;
+
+            TestScenario copy = cloneScenario(original);
+            TreeItem<TestNode> copiedNode = buildScenarioNode(copy);
+            selected.getChildren().add(copiedNode);
+            treeView.getSelectionModel().select(copiedNode);
+        }
+    }
+
+
+    // --- Rename helper ---
+    private void handleRename(TreeItem<TestNode> selected) {
+        NodeType type = selected.getValue().getType();
+        if (type == NodeType.SUITE || type == NodeType.SUB_SUITE) {
+            TestSuite suite = selected.getValue().getSuiteRef();
+            if (suite != null) {
+                String oldName = suite.getName();
+                TextInputDialog dialog = new TextInputDialog(oldName);
+                dialog.setTitle("Rename " + type);
+                dialog.setHeaderText("Rename " + type);
+                dialog.setContentText("New name:");
+                dialog.showAndWait().ifPresent(newName -> {
+                    suite.setName(newName);
+                    Map<String, String> vars = contextVariables.remove(oldName);
+                    if (vars != null) {
+                        contextVariables.put(newName, vars);
+                    }
+                    log.info(() -> "Renamed " + type + " " + oldName + " → " + newName);
+                });
+            }
+        } else if (type == NodeType.TEST_SCENARIO) {
+            TestScenario scenario = selected.getValue().getScenarioRef();
+            if (scenario != null) {
+                String oldName = scenario.getName();
+                TextInputDialog dialog = new TextInputDialog(oldName);
+                dialog.setTitle("Rename Scenario");
+                dialog.setHeaderText("Rename Scenario");
+                dialog.setContentText("New name:");
+                dialog.showAndWait().ifPresent(newName -> {
+                    scenario.setName(newName);
+                    log.info(() -> "Renamed Scenario " + oldName + " → " + newName);
+                });
+            }
+        }
+    }
+
 
 
 
