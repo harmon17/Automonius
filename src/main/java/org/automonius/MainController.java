@@ -47,6 +47,8 @@ import javafx.scene.control.cell.TextFieldListCell;
 import javafx.scene.text.Text;
 import javafx.scene.text.TextFlow;
 import javafx.scene.paint.Color;
+import org.kordamp.ikonli.javafx.FontIcon;
+import org.kordamp.ikonli.materialdesign.MaterialDesign;
 
 
 public class MainController {
@@ -177,7 +179,6 @@ public class MainController {
         final Clipboard clipboard = Clipboard.getSystemClipboard();
         final ClipboardContent clipboardContent = new ClipboardContent();
 
-
         treeView.setOnKeyPressed(event -> {
             TreeItem<TestNode> selected = treeView.getSelectionModel().getSelectedItem();
             if (selected == null) return;
@@ -192,7 +193,7 @@ public class MainController {
             }
         });
 
-// --- Context menu ---
+        // --- Context menu ---
         ContextMenu contextMenu = new ContextMenu();
 
         MenuItem copyMenuItem = new MenuItem("Copy");
@@ -210,104 +211,88 @@ public class MainController {
         });
 
         MenuItem renameMenuItem = new MenuItem("Rename");
-        renameMenuItem.setOnAction(e -> {
+        renameMenuItem.setOnAction(event -> {
             TreeItem<TestNode> selected = treeView.getSelectionModel().getSelectedItem();
-            if (selected != null) handleRename(selected);
+            if (selected == null) return;
+
+            NodeType type = selected.getValue().getType();
+            if (type == NodeType.SUITE || type == NodeType.SUB_SUITE) {
+                TestSuite suite = selected.getValue().getSuiteRef();
+                if (suite != null) {
+                    String oldName = suite.getName();
+                    TextInputDialog dialog = new TextInputDialog(oldName);
+                    dialog.setTitle("Rename " + type);
+                    dialog.setHeaderText("Rename " + type);
+                    dialog.setContentText("New name:");
+
+                    dialog.showAndWait().ifPresent(newName -> {
+                        suite.setName(newName);   // updates bound textProperty automatically
+                        log.info(() -> "Renamed " + type + " " + oldName + " → " + newName);
+
+                        // force UI refresh so icon + text update immediately
+                        treeView.refresh();
+                    });
+                }
+            } else if (type == NodeType.TEST_SCENARIO) {
+                TestScenario scenario = selected.getValue().getScenarioRef();
+                if (scenario != null) {
+                    String oldName = scenario.getName();
+                    TextInputDialog dialog = new TextInputDialog(oldName);
+                    dialog.setTitle("Rename " + type);
+                    dialog.setHeaderText("Rename " + type);
+                    dialog.setContentText("New name:");
+
+                    dialog.showAndWait().ifPresent(newName -> {
+                        scenario.setName(newName);
+                        log.info(() -> "Renamed " + type + " " + oldName + " → " + newName);
+                        treeView.refresh();
+                    });
+                }
+            }
         });
+
 
         contextMenu.getItems().addAll(copyMenuItem, pasteMenuItem, renameMenuItem);
         treeView.setContextMenu(contextMenu);
 
-
-
-
-
-        // --- Drag and Drop setup ---
-        treeView.setOnDragDetected(event -> { /* keep original drag logic */ });
-        treeView.setOnDragOver(event -> { /* keep original drag logic */ });
-        treeView.setOnDragDropped(event -> { /* keep original drop logic */ });
+        // --- Enable drag & drop + icons ---
+        enableDragAndDrop(treeView);
 
         // --- Toggle listener ---
-        showStepsToggle.selectedProperty().addListener((obs, wasSelected, isSelected) -> { /* keep original toggle logic */ });
+        showStepsToggle.selectedProperty().addListener((obs, wasSelected, isSelected) -> {
+            // keep original toggle logic
+        });
 
-        // --- TreeView cell factory with icons ---
-        treeView.setCellFactory(tv -> new TreeCell<>() {
-            @Override
-            protected void updateItem(TestNode item, boolean empty) {
-                super.updateItem(item, empty);
-
-                if (empty || item == null) {
-                    textProperty().unbind();
-                    setText(null);
-                    setGraphic(null);
-                    setStyle("");
-                } else {
-                    textProperty().unbind(); // avoid stale bindings
-                    setStyle("");
-
-                    switch (item.getType()) {
-                        case ROOT -> {
-                            setText(item.getName());
-                            setGraphic(makeIcon("/icons/bank.png", 16, 16));
-                        }
-                        case SUITE -> {
-                            TestSuite suite = item.getSuiteRef();
-                            if (suite != null) {
-                                textProperty().bind(suite.nameProperty());
-                                suite.nameProperty().addListener((obs, oldVal, newVal) ->
-                                        log.info(() -> "TreeView label updated for suite " + suite.getId()
-                                                + ": " + oldVal + " -> " + newVal));
-                            }
-                            setGraphic(makeIcon("/icons/MainSuite.png", 16, 16));
-                        }
-                        case SUB_SUITE -> {
-                            TestSuite subSuite = item.getSuiteRef();
-                            if (subSuite != null) {
-                                textProperty().bind(subSuite.nameProperty());
-                                subSuite.nameProperty().addListener((obs, oldVal, newVal) ->
-                                        log.info(() -> "TreeView label updated for sub-suite " + subSuite.getId()
-                                                + ": " + oldVal + " -> " + newVal));
-                            }
-                            setGraphic(makeIcon("/icons/SubSuite.png", 16, 16));
-                        }
-                        case TEST_SCENARIO -> {
-                            TestScenario scenario = item.getScenarioRef();
-                            if (scenario != null) {
-                                textProperty().bind(scenario.nameProperty());
-                                scenario.nameProperty().addListener((obs, oldVal, newVal) ->
-                                        log.info(() -> "TreeView label updated for scenario " + scenario.getId()
-                                                + ": " + oldVal + " -> " + newVal));
-                            }
-                            setGraphic(makeIcon("/icons/TestSuite.png", 16, 16));
-                        }
-                        case TEST_STEP -> {
-                            setGraphic(makeIcon("/icons/Step.png", 14, 14));
-
-                            TestStep step = item.getStepRef();
-                            String stepName = item.getName();
-                            String status = step != null ? step.getStatus() : "";
-
-                            if (status == null || status.isBlank()) {
-                                // Pending / not run yet
-                                setText(stepName == null || stepName.isBlank() ? "<empty step>" : stepName);
-                                setStyle("-fx-text-fill: gray; -fx-font-style: italic;");
-                            } else if ("PASS".equalsIgnoreCase(status)) {
-                                setText(stepName);
-                                setStyle("-fx-text-fill: green; -fx-font-weight: bold;");
-                                log.info(() -> "TreeView styled PASS for step " + step.getId());
-                            } else if ("FAIL".equalsIgnoreCase(status)) {
-                                setText(stepName);
-                                setStyle("-fx-text-fill: red; -fx-font-weight: bold;");
-                                log.info(() -> "TreeView styled FAIL for step " + step.getId());
-                            } else {
-                                // Any other status (e.g. SKIPPED, ERROR)
-                                setText(stepName);
-                                setStyle("-fx-text-fill: orange; -fx-font-weight: bold;");
-                                log.info(() -> "TreeView styled " + status + " for step " + step.getId());
-                            }
-                        }
-
+        // --- Selection listener ---
+        treeView.getSelectionModel().selectedItemProperty().addListener((obs, oldItem, newItem) -> {
+            if (oldItem != null && oldItem.getValue().getType() == NodeType.TEST_SCENARIO && MainController.isTableDirty()) {
+                commitActiveEdits();
+                TestScenario oldScenario = oldItem.getValue().getScenarioRef();
+                if (oldScenario != null) {
+                    ObservableList<TestStep> committedSteps = FXCollections.observableArrayList();
+                    for (TestStep step : tableView.getItems()) {
+                        committedSteps.add(new TestStep(step));
                     }
+                    oldScenario.getSteps().setAll(committedSteps);
+                    scenarioSteps.put(oldScenario.getId(), committedSteps);
+                    logScenarioSnapshot("Commit", oldScenario, committedSteps, java.time.LocalDateTime.now().toString());
+                    writeScenarioSnapshotToFile(oldScenario, committedSteps, "Commit", java.time.LocalDateTime.now().toString());
+                }
+                MainController.resetTableDirty();
+            }
+
+            if (newItem != null && newItem.getValue().getType() == NodeType.TEST_SCENARIO) {
+                TestScenario newScenario = newItem.getValue().getScenarioRef();
+                if (newScenario != null) {
+                    ObservableList<TestStep> stepsCopy = FXCollections.observableArrayList(
+                            newScenario.getSteps().stream().map(TestStep::new).toList()
+                    );
+                    scenarioSteps.put(newScenario.getId(), stepsCopy);
+                    tableView.setItems(stepsCopy);
+                    adjustArgsColumnWidth();
+                    refreshScenarioUI(newScenario);
+                    logScenarioSnapshot("Load", newScenario, stepsCopy, java.time.LocalDateTime.now().toString());
+                    writeScenarioSnapshotToFile(newScenario, stepsCopy, "Load", java.time.LocalDateTime.now().toString());
                 }
             }
         });
@@ -1172,16 +1157,23 @@ public class MainController {
         }
     }
 
+
     private TreeItem<TestNode> buildSuiteNode(TestSuite suite, NodeType type) {
         String suiteName = (suite.getName() != null && !suite.getName().isBlank())
                 ? suite.getName()
                 : "Unnamed Suite";
 
-        // Use the type passed in (SUITE or SUB_SUITE)
         TestNode suiteNode = new TestNode(suiteName, type);
         suiteNode.setSuiteRef(suite);
         TreeItem<TestNode> suiteItem = new TreeItem<>(suiteNode);
         suiteItem.setExpanded(true);
+
+        // ✅ Add one icon for Suite/SubSuite/TestSuite
+        if (type == NodeType.SUITE || type == NodeType.SUB_SUITE) {
+            FontIcon icon = new FontIcon(MaterialDesign.MDI_EMOTICON); // smiley icon
+            icon.setIconSize(16);
+            suiteItem.setGraphic(icon);
+        }
 
         // Add scenarios
         for (TestScenario scenario : suite.getScenarios()) {
@@ -1194,7 +1186,7 @@ public class MainController {
             TreeItem<TestNode> scenarioItem = new TreeItem<>(scenarioNode);
             scenarioItem.setExpanded(true);
 
-            // ✅ Toggle decides if steps are shown
+            // Steps toggle
             if (showStepsToggle != null && showStepsToggle.isSelected()) {
                 int rowIndex = 1;
                 for (TestStep step : scenario.getSteps()) {
@@ -1222,7 +1214,6 @@ public class MainController {
 
         return suiteItem;
     }
-
 
 
     private TestSuite cloneSuite(TestSuite original) {
@@ -1277,8 +1268,6 @@ public class MainController {
     }
 
 
-
-
     private TreeItem<TestNode> buildScenarioNode(TestScenario scenario) {
         // Create a TestNode wrapper for the scenario
         String scenarioName = (scenario.getName() != null && !scenario.getName().isBlank())
@@ -1325,27 +1314,6 @@ public class MainController {
         }
 
         return scenarioItem;
-    }
-
-
-    private boolean isValidDrop(TreeItem<TestNode> dragged, TreeItem<TestNode> target) {
-        if (dragged == null || target == null) {
-            log.info("Drop rejected: dragged or target is null");
-            return false;
-        }
-
-        NodeType dType = dragged.getValue().getType();
-        NodeType tType = target.getValue().getType();
-
-        boolean allowed = switch (dType) {
-            case SUITE -> (tType == NodeType.ROOT);
-            case SUB_SUITE -> (tType == NodeType.SUITE);
-            case TEST_SCENARIO -> (tType == NodeType.SUITE || tType == NodeType.SUB_SUITE);
-            default -> false;
-        };
-
-        log.info(String.format("Drag type=%s, Target type=%s, Allowed=%s", dType, tType, allowed));
-        return allowed;
     }
 
 
@@ -2526,6 +2494,159 @@ public class MainController {
         }
     }
 
+    private void enableDragAndDrop(TreeView<TestNode> treeView) {
+        treeView.setCellFactory(tv -> {
+            TreeCell<TestNode> cell = new TreeCell<>() {
+                @Override
+                protected void updateItem(TestNode item, boolean empty) {
+                    super.updateItem(item, empty);
+
+                    if (empty || item == null) {
+                        textProperty().unbind();
+                        setText(null);
+                        setGraphic(null);
+                        setStyle("");
+                    } else {
+                        textProperty().unbind();
+                        setStyle("");
+
+                        switch (item.getType()) {
+                            case ROOT -> {
+                                setText(item.getName());
+                                setGraphic(makeIcon("/icons/bank.png", 16, 16));
+                            }
+                            case SUITE -> {
+                                TestSuite suite = item.getSuiteRef();
+                                if (suite != null) textProperty().bind(suite.nameProperty());
+                                setGraphic(makeIcon("/icons/MainSuite.png", 16, 16));
+                            }
+                            case SUB_SUITE -> {
+                                TestSuite subSuite = item.getSuiteRef();
+                                if (subSuite != null) textProperty().bind(subSuite.nameProperty());
+                                setGraphic(makeIcon("/icons/SubSuite.png", 16, 16));
+                            }
+                            case TEST_SCENARIO -> {
+                                TestScenario scenario = item.getScenarioRef();
+                                if (scenario != null) textProperty().bind(scenario.nameProperty());
+                                setGraphic(makeIcon("/icons/TestSuite.png", 16, 16));
+                            }
+                            case TEST_STEP -> {
+                                setGraphic(makeIcon("/icons/Step.png", 14, 14));
+                                TestStep step = item.getStepRef();
+                                String stepName = item.getName();
+                                String status = step != null ? step.getStatus() : "";
+                                if (status == null || status.isBlank()) {
+                                    setText(stepName == null || stepName.isBlank() ? "<empty step>" : stepName);
+                                    setStyle("-fx-text-fill: gray; -fx-font-style: italic;");
+                                } else if ("PASS".equalsIgnoreCase(status)) {
+                                    setText(stepName);
+                                    setStyle("-fx-text-fill: green; -fx-font-weight: bold;");
+                                } else if ("FAIL".equalsIgnoreCase(status)) {
+                                    setText(stepName);
+                                    setStyle("-fx-text-fill: red; -fx-font-weight: bold;");
+                                } else {
+                                    setText(stepName);
+                                    setStyle("-fx-text-fill: orange; -fx-font-weight: bold;");
+                                }
+                            }
+                        }
+                    }
+                }
+            };
+
+            // Attach drag & drop handlers
+            cell.setOnDragDetected(event -> {
+                if (cell.getItem() == null) return;
+                Dragboard db = cell.startDragAndDrop(TransferMode.MOVE);
+                ClipboardContent content = new ClipboardContent();
+                content.putString(cell.getItem().getId().toString());
+                db.setContent(content);
+                event.consume();
+            });
+
+            cell.setOnDragOver(event -> {
+                if (event.getGestureSource() != cell && event.getDragboard().hasString()) {
+                    event.acceptTransferModes(TransferMode.MOVE);
+                    cell.setStyle("-fx-background-color: lightblue;");
+                }
+                event.consume();
+            });
+
+            cell.setOnDragExited(event -> cell.setStyle(""));
+
+            cell.setOnDragDropped(event -> {
+                Dragboard db = event.getDragboard();
+                boolean success = false;
+
+                if (db.hasString()) {
+                    TreeItem<TestNode> draggedItem = findTreeItemById(treeView.getRoot(), db.getString());
+                    TreeItem<TestNode> dropTarget = cell.getTreeItem();
+
+                    if (draggedItem != null && dropTarget != null && draggedItem != dropTarget) {
+                        if (isValidDrop(draggedItem, dropTarget)) {
+                            draggedItem.getParent().getChildren().remove(draggedItem);
+                            dropTarget.getChildren().add(draggedItem);
+                            success = true;
+                            log.info("✔ Dropped " + draggedItem.getValue().getType() +
+                                    " into " + dropTarget.getValue().getType());
+                        } else {
+                            // ❌ Show alert instead of just logging
+                            Alert alert = new Alert(Alert.AlertType.WARNING);
+                            alert.setTitle("Invalid Drop");
+                            alert.setHeaderText("Drop not allowed");
+                            alert.setContentText("❌ Invalid drop: " +
+                                    draggedItem.getValue().getType() + " → " +
+                                    dropTarget.getValue().getType());
+                            alert.showAndWait();
+
+                            log.info("❌ Invalid drop: " + draggedItem.getValue().getType() +
+                                    " → " + dropTarget.getValue().getType());
+                        }
+                    }
+                }
+
+                event.setDropCompleted(success);
+                cell.setStyle(""); // clear highlight
+                event.consume();
+            });
+
+
+            return cell;
+        });
+    }
+
+
+    private TreeItem<TestNode> findTreeItemById(TreeItem<TestNode> root, String id) {
+        if (root == null || root.getValue() == null) return null;
+
+        // Compare UUIDs as strings
+        if (root.getValue().getId().toString().equals(id)) {
+            return root;
+        }
+
+        // Recursively search children
+        for (TreeItem<TestNode> child : root.getChildren()) {
+            TreeItem<TestNode> result = findTreeItemById(child, id);
+            if (result != null) {
+                return result;
+            }
+        }
+
+        return null;
+    }
+
+    private boolean isValidDrop(TreeItem<TestNode> draggedItem, TreeItem<TestNode> dropTarget) {
+        NodeType draggedType = draggedItem.getValue().getType();
+        NodeType targetType = dropTarget.getValue().getType();
+
+        return switch (draggedType) {
+            case SUITE -> targetType == NodeType.ROOT; // Suites only under Root
+            case SUB_SUITE -> targetType == NodeType.SUITE; // SubSuites only under Suites
+            case TEST_SCENARIO -> targetType == NodeType.SUITE || targetType == NodeType.SUB_SUITE; // Scenarios under Suite/SubSuite
+            case TEST_STEP -> targetType == NodeType.TEST_SCENARIO; // Steps only under Scenarios
+            default -> false;
+        };
+    }
 
 
 
