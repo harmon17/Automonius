@@ -176,7 +176,7 @@
                                         <FontIcon iconLiteral="mdi-table-column-plus-after" iconSize="16"/>
                                     </graphic>
                                 </Button>
-                                <Button fx:id="DeleteColumn" onAction="#handleDeleteColumn"
+                                <Button fx:id="DeleteColumn">
                                         styleClass="rounded-addrow-btn">
                                     <graphic>
                                         <FontIcon iconLiteral="mdi-table-column-remove" iconSize="16"/>

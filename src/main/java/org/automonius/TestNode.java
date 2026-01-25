@@ -15,29 +15,44 @@ public class TestNode {
     private TestScenario scenarioRef;
     private TestStep stepRef;
 
-    // --- Constructor ---
+    // --- Constructor for new nodes (generates fresh UUID) ---
     public TestNode(String name, NodeType type) {
+        this(UUID.randomUUID().toString(), name, type);
+    }
+
+    // --- Constructor for restoring from DTO (uses existing ID) ---
+    public TestNode(String id, String name, NodeType type) {
+        this.id = id;
         this.name = name;
         this.type = type;
-        this.id = UUID.randomUUID().toString();
         log.info(() -> "Created TestNode: id=" + id + ", name=" + name + ", type=" + type);
     }
 
     // --- Name ---
-    public String getName() { return name; }
+    public String getName() {
+        return name;
+    }
+
     public void setName(String name) {
         log.fine(() -> "Renaming node " + id + " from " + this.name + " to " + name);
         this.name = name;
     }
 
     // --- Type ---
-    public NodeType getType() { return type; }
+    public NodeType getType() {
+        return type;
+    }
 
     // --- ID ---
-    public String getId() { return id; }
+    public String getId() {
+        return id;
+    }
 
     // --- Suite reference ---
-    public TestSuite getSuiteRef() { return suiteRef; }
+    public TestSuite getSuiteRef() {
+        return suiteRef;
+    }
+
     public void setSuiteRef(TestSuite suiteRef) {
         this.suiteRef = suiteRef;
         if (suiteRef != null) {
@@ -46,7 +61,10 @@ public class TestNode {
     }
 
     // --- Scenario reference ---
-    public TestScenario getScenarioRef() { return scenarioRef; }
+    public TestScenario getScenarioRef() {
+        return scenarioRef;
+    }
+
     public void setScenarioRef(TestScenario scenarioRef) {
         this.scenarioRef = scenarioRef;
         if (scenarioRef != null) {
@@ -55,7 +73,10 @@ public class TestNode {
     }
 
     // --- Step reference ---
-    public TestStep getStepRef() { return stepRef; }
+    public TestStep getStepRef() {
+        return stepRef;
+    }
+
     public void setStepRef(TestStep stepRef) {
         this.stepRef = stepRef;
         if (stepRef != null) {
