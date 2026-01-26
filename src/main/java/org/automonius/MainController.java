@@ -7,6 +7,7 @@ import java.util.*;
 
 import com.google.gson.*;
 import javafx.animation.PauseTransition;
+import javafx.application.Platform;
 import javafx.beans.property.ReadOnlyStringWrapper;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.beans.property.StringProperty;
@@ -15,8 +16,11 @@ import javafx.collections.ObservableList;
 import javafx.collections.transformation.FilteredList;
 import javafx.event.ActionEvent;
 import javafx.fxml.FXML;
+import javafx.fxml.FXMLLoader;
 import javafx.geometry.Side;
 import javafx.scene.Node;
+import javafx.scene.Parent;
+import javafx.scene.Scene;
 import javafx.scene.control.*;
 import javafx.scene.control.cell.PropertyValueFactory;
 import javafx.scene.image.Image;
@@ -25,12 +29,10 @@ import javafx.scene.input.*;
 import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
 import javafx.stage.FileChooser;
+import javafx.stage.Stage;
 import javafx.util.Duration;
 import javafx.util.converter.DefaultStringConverter;
-import org.apache.poi.ss.usermodel.DataFormatter;
-import org.apache.poi.ss.usermodel.Row;
-import org.apache.poi.ss.usermodel.Sheet;
-import org.apache.poi.ss.usermodel.Workbook;
+import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.automonius.Annotations.ActionMeta;
 import org.automonius.Model.VariableTreeController;
@@ -59,6 +61,10 @@ import java.io.FileWriter;
 import java.io.IOException;
 
 import static org.automonius.TestStep.toStringMap;
+
+import org.apache.poi.ss.usermodel.Cell;
+
+import java.util.prefs.Preferences;
 
 
 public class MainController {
@@ -125,34 +131,25 @@ public class MainController {
     @FXML
     private TextFlow executionPreviewFlow;
     private static TestStep copiedStep;
+    // Track the active project file globally
+    private File currentProjectFile;
 
+
+    private Stage primaryStage; // Setter called from Main.start()
+
+    public void setPrimaryStage(Stage stage) {
+        this.primaryStage = stage;
+    }
 
 
     @FXML
-    private void initialize() {
+    public void initialize() {
         log.info("MainController.initialize() called — setting up UI");
 
         discoverActions();
         initializeDefaults();
         setupTreeView();
         loadTree(treeView);
-
-        // 🔥 Only add default Suite if no JSON file exists
-        if (treeView.getRoot() != null &&
-                treeView.getRoot().getChildren().isEmpty() &&
-                !new File("tree.json").exists()) {
-
-            TestSuite suiteModel = new TestSuite("Suite");
-            TestNode node = new TestNode("Suite", NodeType.SUITE);
-            node.setSuiteRef(suiteModel);
-
-            TreeItem<TestNode> suiteItem = new TreeItem<>(node);
-            suiteItem.setExpanded(true);
-            treeView.getRoot().getChildren().add(suiteItem);
-
-            saveTree(treeView.getRoot());
-            log.info("Initialized with Default Suite under Directory Structure");
-        }
 
         setupClipboard();
         setupTreeContextMenu();
@@ -166,8 +163,6 @@ public class MainController {
         log.info("MainController.initialize() finished — TreeView root=" +
                 (treeView.getRoot() != null ? treeView.getRoot().getValue().getName() : "null"));
     }
-
-
 
 
     // --- Discover actions ---
@@ -223,6 +218,7 @@ public class MainController {
             }
         }
     }
+
     // --- TreeView setup ---
     private void setupTreeView() {
         TreeItem<TestNode> root = new TreeItem<>(new TestNode("Directory Structure", NodeType.ROOT));
@@ -234,7 +230,6 @@ public class MainController {
 
         log.info("TreeView initialized with root: " + root.getValue().getName());
     }
-
 
 
     // --- Clipboard setup ---
@@ -271,6 +266,57 @@ public class MainController {
             }
         });
     }
+
+    public void setupInitialProject() {
+        Preferences prefs = Preferences.userNodeForPackage(MainController.class);
+        String lastPath = prefs.get("lastProjectPath", null);
+
+        if (lastPath != null) {
+            File lastFile = new File(lastPath);
+            if (lastFile.exists()) {
+                Alert alert = new Alert(Alert.AlertType.CONFIRMATION,
+                        "Reopen last project: " + lastFile.getName() + "?",
+                        ButtonType.YES, ButtonType.NO);
+                alert.setHeaderText(null);
+                alert.initOwner(primaryStage);
+
+                Optional<ButtonType> result = alert.showAndWait();
+                if (result.isPresent() && result.get() == ButtonType.YES) {
+                    loadTreeFromFile(lastFile);
+                    log.info("Restored last project from " + lastFile.getAbsolutePath());
+                    return;
+                }
+                // If NO → fall through to FileChooser
+            }
+        }
+
+        FileChooser chooser = new FileChooser();
+        chooser.setTitle("Load Project File");
+        chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("JSON Files", "*.json"));
+        File file = chooser.showOpenDialog(primaryStage);
+
+        if (file != null) {
+            loadTreeFromFile(file);
+            prefs.put("lastProjectPath", file.getAbsolutePath());
+            log.info("User selected project: " + file.getAbsolutePath());
+        } else {
+            // fallback: build default suite
+            if (treeView.getRoot() != null && treeView.getRoot().getChildren().isEmpty()) {
+                TestSuite suiteModel = new TestSuite("Suite");
+                TestNode node = new TestNode("Suite", NodeType.SUITE);
+                node.setSuiteRef(suiteModel);
+
+                TreeItem<TestNode> suiteItem = new TreeItem<>(node);
+                suiteItem.setExpanded(true);
+                treeView.getRoot().getChildren().add(suiteItem);
+
+                saveTree(treeView.getRoot());
+                log.info("Initialized with Default Suite under Directory Structure");
+            }
+        }
+    }
+
+
 
     // --- TreeView context menu ---
     private void setupTreeContextMenu() {
@@ -345,8 +391,6 @@ public class MainController {
 
         treeView.setContextMenu(treeMenu);
     }
-
-
 
 
     // --- TableView context menu ---
@@ -429,6 +473,7 @@ public class MainController {
             }
         });
     }
+
     // --- TableView setup (structural only) ---
     private void setupTableView() {
         tableView.setEditable(true);
@@ -622,6 +667,7 @@ public class MainController {
             return row;
         });
     }
+
     // --- ListView setup ---
     private void setupListView() {
         resolvedVariableList.setEditable(true);
@@ -784,48 +830,56 @@ public class MainController {
     }
 
 
-
     private String makeKey(TreeItem<TestNode> scenario) {
         return scenario.getValue().getId(); // use UUID, not name path
     }
 
 
     private void saveProject() {
-        // Save under user home directory (portable)
         File projectDir = new File(System.getProperty("user.home"), "AutomoniusProject");
         if (!projectDir.exists() && !projectDir.mkdirs()) {
             showError("Failed to create project directory: " + projectDir.getAbsolutePath());
             return;
         }
 
-        // Iterate over all top-level suites
         for (TreeItem<TestNode> suiteItem : treeView.getRoot().getChildren()) {
             TestNode suiteNode = suiteItem.getValue();
             if (suiteNode.getType() == NodeType.SUITE && suiteNode.getSuiteRef() != null) {
-                TestSuite suiteModel = suiteNode.getSuiteRef();
-
                 try (Workbook workbook = new XSSFWorkbook()) {
-                    // Sanitize sheet name (Excel limits to 31 chars, no special chars)
-                    String safeSheetName = suiteModel.getName().replaceAll("[\\\\/:*?\"<>|]", "_");
+                    // 🔥 Use node name for sheet name
+                    String safeSheetName = suiteNode.getName().replaceAll("[\\\\/:*?\"<>|]", "_");
                     if (safeSheetName.length() > 31) {
                         safeSheetName = safeSheetName.substring(0, 31);
                     }
                     Sheet sheet = workbook.createSheet(safeSheetName);
 
                     AtomicInteger rowIndex = new AtomicInteger(0);
-                    saveScenariosRecursive(sheet, suiteItem, rowIndex);
 
-                    // Sanitize file name too
-                    String safeFileName = suiteModel.getName().replaceAll("[\\\\/:*?\"<>|]", "_") + ".xlsx";
+                    // Export scenarios + steps with polished styling
+                    saveScenariosRecursive(sheet, suiteItem, rowIndex, workbook);
+
+                    // Auto-size all columns
+                    if (sheet.getRow(0) != null) {
+                        int lastCol = sheet.getRow(0).getLastCellNum();
+                        for (int i = 0; i < lastCol; i++) {
+                            sheet.autoSizeColumn(i);
+                        }
+                    }
+
+                    // Freeze header row for readability
+                    sheet.createFreezePane(0, 1);
+
+                    // 🔥 Use node name for file name
+                    String safeFileName = suiteNode.getName().replaceAll("[\\\\/:*?\"<>|]", "_") + ".xlsx";
                     File outFile = new File(projectDir, safeFileName);
 
                     try (FileOutputStream out = new FileOutputStream(outFile)) {
                         workbook.write(out);
-                        updateExecutionPreview("Saved suite: " + suiteModel.getName() +
-                                " (id=" + suiteModel.getId() + ") → " + outFile.getName());
+                        updateExecutionPreview("Saved suite: " + suiteNode.getName() +
+                                " (id=" + suiteNode.getId() + ") → " + outFile.getName());
                     }
                 } catch (IOException e) {
-                    showError("Failed to save suite " + suiteModel.getName() + ": " + e.getMessage());
+                    showError("Failed to save suite " + suiteNode.getName() + ": " + e.getMessage());
                 }
             }
         }
@@ -833,6 +887,80 @@ public class MainController {
         System.out.println("Project saved to " + projectDir.getAbsolutePath());
     }
 
+    // 🔎 Helper: Bold, colored style for scenario headers
+    private CellStyle createScenarioHeaderStyle(Workbook workbook) {
+        Font headerFont = workbook.createFont();
+        headerFont.setBold(true);
+        headerFont.setFontHeightInPoints((short) 12);
+        headerFont.setColor(IndexedColors.WHITE.getIndex());
+
+        CellStyle headerStyle = workbook.createCellStyle();
+        headerStyle.setFont(headerFont);
+        headerStyle.setFillForegroundColor(IndexedColors.DARK_BLUE.getIndex());
+        headerStyle.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+        headerStyle.setAlignment(HorizontalAlignment.LEFT);
+
+        return headerStyle;
+    }
+
+    // 🔎 Helper: Zebra striping for step rows
+    private CellStyle createStepRowStyle(Workbook workbook, boolean evenRow) {
+        CellStyle style = workbook.createCellStyle();
+        if (evenRow) {
+            style.setFillForegroundColor(IndexedColors.GREY_25_PERCENT.getIndex());
+        } else {
+            style.setFillForegroundColor(IndexedColors.WHITE.getIndex());
+        }
+        style.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+        return style;
+    }
+
+    // 🔎 Recursive scenario export with styling
+    private void saveScenariosRecursive(Sheet sheet, TreeItem<TestNode> suiteItem,
+                                        AtomicInteger rowIndex, Workbook workbook) {
+        CellStyle headerStyle = createScenarioHeaderStyle(workbook);
+
+        for (TreeItem<TestNode> scenarioItem : suiteItem.getChildren()) {
+            TestNode scenarioNode = scenarioItem.getValue();
+            if (scenarioNode.getType() == NodeType.TEST_SCENARIO && scenarioNode.getScenarioRef() != null) {
+                TestScenario scenario = scenarioNode.getScenarioRef();
+
+                // Scenario header row
+                Row headerRow = sheet.createRow(rowIndex.getAndIncrement());
+                Cell headerCell = headerRow.createCell(0);
+                headerCell.setCellValue("Scenario: " + scenario.getName());
+                headerCell.setCellStyle(headerStyle);
+
+                // Step rows
+                for (TestStep step : scenario.getSteps()) {
+                    Row stepRow = sheet.createRow(rowIndex.getAndIncrement());
+                    int colIndex = 0;
+                    stepRow.createCell(colIndex++).setCellValue(step.getItem());
+                    stepRow.createCell(colIndex++).setCellValue(step.getObject());
+                    stepRow.createCell(colIndex++).setCellValue(step.getAction());
+                    stepRow.createCell(colIndex++).setCellValue(step.getDescription());
+                    stepRow.createCell(colIndex++).setCellValue(step.getInput());
+
+                    // Extras
+                    for (String colName : step.getExtras().keySet()) {
+                        String value = step.getExtra(colName);
+                        stepRow.createCell(colIndex++).setCellValue(value);
+                    }
+
+                    // Apply zebra striping
+                    CellStyle stepStyle = createStepRowStyle(workbook, rowIndex.get() % 2 == 0);
+                    for (int i = 0; i < colIndex; i++) {
+                        stepRow.getCell(i).setCellStyle(stepStyle);
+                    }
+                }
+            }
+
+            // Recurse into child suites if any
+            if (!scenarioItem.getChildren().isEmpty()) {
+                saveScenariosRecursive(sheet, scenarioItem, rowIndex, workbook);
+            }
+        }
+    }
 
 
     private void saveScenariosRecursive(Sheet sheet, TreeItem<TestNode> node, AtomicInteger rowIndex) {
@@ -846,9 +974,9 @@ public class MainController {
         if (type == NodeType.TEST_SCENARIO) {
             TestScenario scenario = node.getValue().getScenarioRef();
             if (scenario != null) {
-                // Scenario header row
+                // Scenario header row — use node name, not scenario model
                 Row row = sheet.createRow(rowIndex.getAndIncrement());
-                row.createCell(0).setCellValue("Scenario: " + scenario.getName());
+                row.createCell(0).setCellValue("Scenario: " + node.getValue().getName());
 
                 // Collect all extras across steps
                 Set<String> allExtras = scenario.getSteps().stream()
@@ -892,8 +1020,6 @@ public class MainController {
             saveScenariosRecursive(sheet, child, rowIndex);
         }
     }
-
-
 
 
     @FXML
@@ -983,21 +1109,23 @@ public class MainController {
         dialog.showAndWait().ifPresent(newName -> {
             if (!newName.trim().isEmpty()) {
                 String trimmed = newName.trim();
-                node.getValue().setName(trimmed);
-                treeView.refresh();
+                TestNode testNode = node.getValue();
+                String oldName = testNode.getName();
 
-                // 🔥 Sync the underlying model reference
-                if (node.getValue().getType() == NodeType.SUITE || node.getValue().getType() == NodeType.SUB_SUITE) {
-                    if (node.getValue().getSuiteRef() != null) {
-                        node.getValue().getSuiteRef().setName(trimmed);
+                // Update UI label
+                testNode.setName(trimmed);
+
+                // Sync underlying model
+                if (testNode.getType() == NodeType.SUITE || testNode.getType() == NodeType.SUB_SUITE) {
+                    if (testNode.getSuiteRef() != null) {
+                        testNode.getSuiteRef().setName(trimmed);
                     }
-                }
-                if (node.getValue().getType() == NodeType.TEST_SCENARIO) {
-                    if (node.getValue().getScenarioRef() != null) {
-                        node.getValue().getScenarioRef().setName(trimmed);
+                } else if (testNode.getType() == NodeType.TEST_SCENARIO) {
+                    if (testNode.getScenarioRef() != null) {
+                        testNode.getScenarioRef().setName(trimmed);
                     }
 
-                    // ✅ Update keys in scenarioSteps/scenarioColumns
+                    // Update keys in scenarioSteps/scenarioColumns
                     String oldKey = makeKey(node);
                     String newKey = makeKey(node);
                     if (scenarioSteps.containsKey(oldKey)) {
@@ -1007,6 +1135,10 @@ public class MainController {
                         scenarioColumns.put(newKey, scenarioColumns.remove(oldKey));
                     }
                 }
+
+                log.info(() -> "Renamed " + testNode.getType() + " " + oldName + " → " + trimmed);
+                treeView.refresh();
+                saveTree(treeView.getRoot());
             }
         });
     }
@@ -1655,7 +1787,6 @@ public class MainController {
     }
 
 
-
     @FXML
     private void handleNewSubSuite(ActionEvent event) {
         TreeItem<TestNode> selected = treeView.getSelectionModel().getSelectedItem();
@@ -1752,45 +1883,43 @@ public class MainController {
 
     @FXML
     private void handleSave(ActionEvent event) {
-        TreeItem<TestNode> selected = treeView.getSelectionModel().getSelectedItem();
-        if (selected != null && selected.getValue().getType() == NodeType.TEST_SCENARIO) {
-            saveTestScenario(selected);
-            updateExecutionPreview("Saved scenario: " + selected.getValue().getName());
-        }
-        // Always export project when saving
-        saveProject();
-        updateExecutionPreview("Project saved successfully.");
-    }
-
-    private void saveTestScenario(TreeItem<TestNode> scenarioItem) {
-        TestNode node = scenarioItem.getValue();
-        TestScenario scenario = node.getScenarioRef();
-        if (scenario == null) {
-            showError("No scenario model attached to this node.");
+        TreeItem<TestNode> root = treeView.getRoot();
+        if (root == null) {
+            showError("No project tree to save.");
             return;
         }
 
-        try {
-            FileChooser fileChooser = new FileChooser();
-            fileChooser.setTitle("Save Scenario");
-            fileChooser.getExtensionFilters().add(
-                    new FileChooser.ExtensionFilter("JSON Files", "*.json")
-            );
-            File file = fileChooser.showSaveDialog(treeView.getScene().getWindow());
+        // 🔥 Prompt user for save choice
+        Alert choice = new Alert(Alert.AlertType.CONFIRMATION);
+        choice.setTitle("Save Project");
+        choice.setHeaderText("Choose how to save the project");
+        choice.setContentText("Do you want to overwrite the current file or save as a new one?");
 
-            if (file != null) {
-                // Example: serialize steps to JSON
-                Gson gson = new GsonBuilder().setPrettyPrinting().create();
-                try (Writer writer = new FileWriter(file)) {
-                    gson.toJson(scenario.getSteps(), writer);
+        ButtonType saveAsIs = new ButtonType("Save As Is");
+        ButtonType saveAsNew = new ButtonType("Save As New File");
+        ButtonType cancel = new ButtonType("Cancel", ButtonBar.ButtonData.CANCEL_CLOSE);
+
+        choice.getButtonTypes().setAll(saveAsIs, saveAsNew, cancel);
+
+        Optional<ButtonType> result = choice.showAndWait();
+        if (result.isPresent()) {
+            if (result.get() == saveAsIs) {
+                saveTree(root); // overwrites currentProjectFile
+                updateExecutionPreview("Project saved successfully to " + currentProjectFile.getName());
+            } else if (result.get() == saveAsNew) {
+                FileChooser chooser = new FileChooser();
+                chooser.setTitle("Save Project As");
+                chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("JSON Files", "*.json"));
+                File newFile = chooser.showSaveDialog(treeView.getScene().getWindow());
+                if (newFile != null) {
+                    currentProjectFile = newFile; // update active file
+                    saveTree(root);               // save to new file
+                    updateExecutionPreview("Project saved successfully as " + newFile.getName());
                 }
-                updateExecutionPreview("Scenario saved to: " + file.getAbsolutePath());
             }
-        } catch (Exception e) {
-            showError("Error saving scenario: " + e.getMessage());
-            e.printStackTrace();
         }
     }
+
 
     @FXML
     private void handleAddRow(ActionEvent event) {
@@ -1872,8 +2001,6 @@ public class MainController {
     }
 
 
-
-
     // Helper to copy extras
     // Helper to copy extras safely
     private static Map<String, SimpleStringProperty> copyExtras(Map<String, SimpleStringProperty> original) {
@@ -1905,8 +2032,6 @@ public class MainController {
                 original.isNew()
         );
     }
-
-
 
 
     @FXML
@@ -3057,8 +3182,6 @@ public class MainController {
     }
 
 
-
-
     private TreeItem<TestNode> fromDTO(NodeDTO dto) {
         TestNode node = new TestNode(dto.getId(), dto.getName(), dto.getType());
 
@@ -3136,37 +3259,50 @@ public class MainController {
     }
 
 
-
     // --- Save helper ---
+
     private void saveTree(TreeItem<TestNode> root) {
         if (root == null) {
             log.warning("saveTree called with null root");
             return;
         }
 
-        try (FileWriter writer = new FileWriter("tree.json")) {
-            NodeDTO dto = toDTO(root); // convert the full hierarchy
-            Gson gson = new GsonBuilder().setPrettyPrinting().create();
-            gson.toJson(dto, writer);
+        try {
+            // 🔥 If no file has been chosen yet, default to tree.json in AutomoniusProject
+            if (currentProjectFile == null) {
+                File projectDir = new File(System.getProperty("user.home"), "AutomoniusProject");
+                if (!projectDir.exists()) projectDir.mkdirs();
+                currentProjectFile = new File(projectDir, "tree.json");
+            }
 
-            log.info("Tree persisted successfully to tree.json");
+            try (FileWriter writer = new FileWriter(currentProjectFile)) {
+                NodeDTO dto = toDTO(root); // convert the full hierarchy
+                Gson gson = new GsonBuilder().setPrettyPrinting().create();
+                gson.toJson(dto, writer);
+
+                log.info("Tree persisted successfully to " + currentProjectFile.getAbsolutePath());
+            }
         } catch (IOException e) {
+            showError("Failed to save tree: " + e.getMessage());
             log.severe("Failed to save tree: " + e.getMessage());
         }
     }
+
 
     public void stop() {
         saveTree(treeView.getRoot());
     }
 
 
-    // --- Load helper ---
     private void loadTree(TreeView<TestNode> treeView) {
-        File file = new File("tree.json");
-        if (!file.exists()) {
-            log.warning("No persisted tree.json found, starting with empty tree");
+        File projectDir = new File(System.getProperty("user.home"), "AutomoniusProject");
+        if (!projectDir.exists()) projectDir.mkdirs();
 
-            // 🔥 Add a default Suite so tree isn’t empty
+        File[] jsonFiles = projectDir.listFiles((dir, name) -> name.toLowerCase().endsWith(".json"));
+
+        if (jsonFiles == null || jsonFiles.length == 0) {
+            log.warning("No JSON project found, starting with empty tree");
+
             TreeItem<TestNode> root = treeView.getRoot();
             if (root != null && root.getChildren().isEmpty()) {
                 TestSuite suiteModel = new TestSuite("Default Suite");
@@ -3177,9 +3313,34 @@ public class MainController {
                 suiteItem.setExpanded(true);
                 root.getChildren().add(suiteItem);
 
+                currentProjectFile = new File(projectDir, "tree.json");
                 saveTree(treeView.getRoot());
                 log.info("Initialized with Default Suite under Directory Structure");
             }
+            return;
+        }
+
+        if (jsonFiles.length == 1) {
+            currentProjectFile = jsonFiles[0];
+            loadTreeFromFile(currentProjectFile);
+            return;
+        }
+
+        // Multiple files → let user choose
+        FileChooser chooser = new FileChooser();
+        chooser.setTitle("Select Project File");
+        chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("JSON Files", "*.json"));
+        File selected = chooser.showOpenDialog(treeView.getScene().getWindow());
+        if (selected != null) {
+            currentProjectFile = selected;
+            loadTreeFromFile(selected);
+        }
+    }
+
+    private void loadTreeFromFile(File file) {
+        if (file == null || !file.exists()) {
+            showError("Project file not found: " + (file != null ? file.getAbsolutePath() : "null"));
+            log.warning("No project file provided or file does not exist.");
             return;
         }
 
@@ -3187,19 +3348,39 @@ public class MainController {
             Gson gson = new GsonBuilder().setPrettyPrinting().create();
             NodeDTO dto = gson.fromJson(reader, NodeDTO.class);
 
+            // 🔥 Restore hierarchy from DTO
             TreeItem<TestNode> restoredRoot = fromDTO(dto);
             restoredRoot.setExpanded(true);
             treeView.setRoot(restoredRoot);
 
-            log.info("Tree restored successfully from tree.json, children="
-                    + restoredRoot.getChildren().size());
+            // Track which file is active for saving later
+            currentProjectFile = file;
+
+            log.info("Tree restored successfully from " + file.getAbsolutePath() +
+                    ", children=" + restoredRoot.getChildren().size());
         } catch (IOException e) {
-            showError("Failed to load tree: " + e.getMessage());
-            log.severe("Failed to load tree: " + e.getMessage());
+            showError("Failed to load project: " + e.getMessage());
+            log.severe("Failed to load project: " + e.getMessage());
         }
     }
 
+    @FXML
+    private void handleLoadProject(ActionEvent event) {
+        FileChooser chooser = new FileChooser();
+        chooser.setTitle("Load Project File");
+        chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("JSON Files", "*.json"));
+        File file = chooser.showOpenDialog(treeView.getScene().getWindow());
 
+        if (file != null) {
+            treeView.setRoot(null); // clear old tree
+            loadTreeFromFile(file); // 🔥 call your helper
+            Preferences.userNodeForPackage(MainController.class)
+                    .put("lastProjectPath", file.getAbsolutePath());
+            updateExecutionPreview("Loaded project: " + file.getName());
+        } else {
+            updateExecutionPreview("Project load cancelled.");
+        }
+    }
 
 
     private TestStep findStepById(String id) {
@@ -3378,7 +3559,6 @@ public class MainController {
     }
 
 
-
     /**
      * Persist scenario changes after modifying steps (AddRow, Paste, Run, etc.)
      * Ensures model, cache, UI, and snapshot are all updated consistently.
@@ -3410,6 +3590,31 @@ public class MainController {
         log.info(() -> actionLabel + " scenario " + scenario.getId() +
                 " with " + tableView.getItems().size() + " steps");
     }
+
+    @FXML
+    private void handleExportExcel(ActionEvent event) {
+        saveProject(); // your existing Excel export method
+        updateExecutionPreview("Excel report exported successfully.");
+    }
+
+
+    public void start(Stage primaryStage) throws Exception {
+        FXMLLoader loader = new FXMLLoader(getClass().getResource("/fxml/Main.fxml"));
+        Parent root = loader.load();
+
+        MainController controller = loader.getController();
+        controller.setPrimaryStage(primaryStage);
+
+        Scene scene = new Scene(root);
+        primaryStage.setScene(scene);
+        primaryStage.setTitle("Automonius");
+        primaryStage.show();
+
+        // 🔥 Defer until after stage is visible
+        Platform.runLater(controller::setupInitialProject);
+    }
+
+
 
 
 }
