@@ -348,32 +348,18 @@ public class MainController {
         });
 
         // --- Rename (Suite, SubSuite, Scenario) ---
+
         MenuItem renameMenuItem = new MenuItem("Rename");
         renameMenuItem.setOnAction(event -> {
             TreeItem<TestNode> selected = treeView.getSelectionModel().getSelectedItem();
-            if (selected == null) return;
-
-            NodeType type = selected.getValue().getType();
-            String oldName = selected.getValue().getName();
-
-            TextInputDialog dialog = new TextInputDialog(oldName);
-            dialog.setTitle("Rename " + type);
-            dialog.setHeaderText("Rename " + type);
-            dialog.setContentText("New name:");
-
-            dialog.showAndWait().ifPresent(newName -> {
-                if (type == NodeType.SUITE || type == NodeType.SUB_SUITE) {
-                    TestSuite suite = selected.getValue().getSuiteRef();
-                    if (suite != null) suite.setName(newName);
-                } else if (type == NodeType.TEST_SCENARIO) {
-                    TestScenario scenario = selected.getValue().getScenarioRef();
-                    if (scenario != null) scenario.setName(newName);
-                }
-                log.info(() -> "Renamed " + type + " " + oldName + " → " + newName);
-                treeView.refresh();
-                saveTree(treeView.getRoot());
-            });
+            if (selected != null) {
+                // ✅ This will show the TextInputDialog and handle renaming
+                handleRenameNode(selected);
+            }
         });
+// Disable rename only for Root if needed
+        renameMenuItem.setDisable(false);
+
 
         // --- Delete node ---
         MenuItem deleteNodeItem = new MenuItem("Delete");
@@ -1124,16 +1110,7 @@ public class MainController {
                     if (testNode.getScenarioRef() != null) {
                         testNode.getScenarioRef().setName(trimmed);
                     }
-
-                    // Update keys in scenarioSteps/scenarioColumns
-                    String oldKey = makeKey(node);
-                    String newKey = makeKey(node);
-                    if (scenarioSteps.containsKey(oldKey)) {
-                        scenarioSteps.put(newKey, scenarioSteps.remove(oldKey));
-                    }
-                    if (scenarioColumns.containsKey(oldKey)) {
-                        scenarioColumns.put(newKey, scenarioColumns.remove(oldKey));
-                    }
+                    // ✅ No need to remap scenarioSteps/scenarioColumns — UUID key is stable
                 }
 
                 log.info(() -> "Renamed " + testNode.getType() + " " + oldName + " → " + trimmed);
@@ -1142,6 +1119,8 @@ public class MainController {
             }
         });
     }
+
+
 
 
     private void handleRenameColumn(TableColumn<TestStep, String> column, TreeItem<TestNode> scenario) {
@@ -3121,7 +3100,9 @@ public class MainController {
         NodeDTO dto = new NodeDTO();
         dto.setId(node.getId());
         dto.setType(node.getType());
-        dto.setName(node.getName());   // persist the label
+
+        // 🔥 Always persist the UI-bound name
+        dto.setName(node.getName());
 
         switch (node.getType()) {
             case ROOT, SUITE, SUB_SUITE -> {
@@ -3132,7 +3113,7 @@ public class MainController {
             case TEST_SCENARIO -> {
                 TestScenario scenario = node.getScenarioRef();
                 if (scenario != null) {
-                    dto.setName(scenario.getName()); // 🔥 ensure scenario name is correct
+                    // ✅ Keep dto.name from node.getName(), do not overwrite
                     dto.setScenarioStatus(scenario.getStatus());
                     dto.setScenarioExtras(
                             scenario.getExtras() != null ? TestStep.toStringMap(scenario.getExtras()) : null
@@ -3182,18 +3163,21 @@ public class MainController {
     }
 
 
+
     private TreeItem<TestNode> fromDTO(NodeDTO dto) {
+        // 🔥 Ensure TestNode is created with the persisted name
         TestNode node = new TestNode(dto.getId(), dto.getName(), dto.getType());
+        node.setName(dto.getName()); // make sure bound property is updated
 
         if (dto.getType() == NodeType.SUITE || dto.getType() == NodeType.SUB_SUITE) {
             TestSuite suite = new TestSuite(dto.getId(), dto.getName());
-            suite.setName(dto.getName());   // restore name
+            suite.setName(dto.getName());   // restore suite name
             node.setSuiteRef(suite);
         }
 
         if (dto.getType() == NodeType.TEST_SCENARIO) {
             TestScenario scenario = new TestScenario(dto.getId(), dto.getName());
-            scenario.setName(dto.getName());   // restore name
+            scenario.setName(dto.getName());   // restore scenario name
             scenario.setStatus(dto.getScenarioStatus());
 
             if (dto.getScenarioExtras() != null) {
@@ -3244,6 +3228,7 @@ public class MainController {
             node.setStepRef(step);
         }
 
+
         TreeItem<TestNode> item = buildTreeItem(node);
 
         if (dto.getChildren() != null &&
@@ -3257,6 +3242,7 @@ public class MainController {
 
         return item;
     }
+
 
 
     // --- Save helper ---
@@ -3442,10 +3428,10 @@ public class MainController {
 
         // --- Rename ---
         MenuItem renameItem = new MenuItem("Rename");
-        renameItem.setOnAction(e -> handleRename(item));
-        // Disable rename on Root
+        renameItem.setOnAction(e -> handleRenameNode(item)); // ✅ use the unified handler
         renameItem.setDisable(type == NodeType.ROOT);
         menu.getItems().add(renameItem);
+
 
         // --- Run Step (only for steps) ---
         if (type == NodeType.TEST_STEP) {
