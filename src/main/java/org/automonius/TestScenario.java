@@ -22,7 +22,8 @@ public class TestScenario {
     private final ObservableList<TestStep> steps = FXCollections.observableArrayList();
 
     // Scenario-level extras act as headers (argument names + optional defaults)
-    private final Map<String, SimpleStringProperty> extras = new LinkedHashMap<>();
+    private final Map<String, StringProperty> extras = new LinkedHashMap<>();
+
 
     // --- Constructors ---
     public TestScenario(String name,
@@ -49,13 +50,14 @@ public class TestScenario {
             }
         }
 
-        Map<String, SimpleStringProperty> seededExtras = defaultArgs.stream()
+        Map<String, StringProperty> seededExtras = defaultArgs.stream()
                 .collect(Collectors.toMap(
                         arg -> arg,
-                        arg -> new SimpleStringProperty(""),
+                        arg -> new SimpleStringProperty(""), // ✅ still fine, implements StringProperty
                         (a, b) -> a,
                         LinkedHashMap::new
                 ));
+
 
         blank.setExtras(seededExtras);
         blank.setMaxArgs(seededExtras.size());
@@ -118,9 +120,10 @@ public class TestScenario {
     }
 
     // --- Extras ---
-    public Map<String, SimpleStringProperty> getExtras() {
+    public Map<String, StringProperty> getExtras() {
         return Collections.unmodifiableMap(extras);
     }
+
 
     public void setExtras(Map<String, SimpleStringProperty> newExtras) {
         extras.clear();
@@ -156,6 +159,9 @@ public class TestScenario {
     // --- Convenience helpers ---
     public List<String> getExtraNames() { return new ArrayList<>(extras.keySet()); }
     public List<String> getExtraValues() {
-        return extras.values().stream().map(SimpleStringProperty::get).toList();
+        return extras.values().stream()
+                .map(StringProperty::get)   // ✅ use StringProperty here
+                .toList();
     }
+
 }

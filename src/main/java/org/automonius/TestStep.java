@@ -1,19 +1,15 @@
 package org.automonius;
 
+import javafx.beans.property.BooleanProperty;
+import javafx.beans.property.SimpleBooleanProperty;
 import javafx.beans.property.SimpleStringProperty;
+import javafx.beans.property.StringProperty;
 import org.automonius.exec.TestCase;
 
 import java.util.*;
 
 /**
  * Represents a single test step row in the TableView.
- * - id: unique identifier (stable if restored from DTO)
- * - item, action, object, input, description: core step fields
- * - type: classification of the step
- * - status: execution result (PASSED/FAILED/NEW/etc.)
- * - extras: dynamic argument values (Arg1, Arg2, ...)
- * - maxArgs: tracks maximum number of arguments
- * - isNew: flag for newly created steps
  */
 public class TestStep {
 
@@ -21,21 +17,23 @@ public class TestStep {
     private final String id;
 
     // --- Core fields ---
-    private final SimpleStringProperty item;
-    private final SimpleStringProperty action;
-    private final SimpleStringProperty object;
-    private final SimpleStringProperty input;
-    private final SimpleStringProperty description;
-
-    private final SimpleStringProperty type;
-    private final SimpleStringProperty status;
+    private final StringProperty item;
+    private final StringProperty action;
+    private final StringProperty object;
+    private final StringProperty input;
+    private final StringProperty description;
+    private final StringProperty type;
+    private final StringProperty status;
 
     // --- Extras ---
-    private final Map<String, SimpleStringProperty> extras = new LinkedHashMap<>();
+    private final Map<String, StringProperty> extras = new LinkedHashMap<>();
     private int maxArgs = 0;
 
     // --- Flags ---
     private boolean isNew = false;
+
+    // --- Selection flag for multi-run ---
+    private final BooleanProperty selected = new SimpleBooleanProperty(false);
 
     // --- Constructors ---
 
@@ -61,9 +59,11 @@ public class TestStep {
         }
     }
 
-    /** Deep copy constructor (new ID by default) */
+    /** Deep copy constructor (preserve ID) */
     public TestStep(TestStep original) {
-        this(UUID.randomUUID().toString(),
+        this(original.getId() == null || original.getId().isBlank()
+                        ? UUID.randomUUID().toString()
+                        : original.getId(),
                 original.getItem(), original.getAction(), original.getObject(),
                 original.getInput(), original.getDescription(),
                 original.getType(), original.getStatus(),
@@ -95,7 +95,7 @@ public class TestStep {
 
         if (extrasMap != null) {
             extrasMap.forEach((k, v) -> {
-                SimpleStringProperty prop = new SimpleStringProperty(v);
+                StringProperty prop = new SimpleStringProperty(v);
                 attachDirtyListener(prop, k);
                 this.extras.put(k, prop);
             });
@@ -103,12 +103,10 @@ public class TestStep {
     }
 
     // --- Copy helpers ---
-    /** Full clone with values (for Paste) */
     public static TestStep deepCopy(TestStep original) {
         return (original == null) ? null : new TestStep(original);
     }
 
-    /** Template clone with blank extras (for AddRow) */
     public static TestStep copyTemplate(TestStep template) {
         if (template == null) return new TestStep();
 
@@ -118,11 +116,11 @@ public class TestStep {
         step.setAction(template.getAction());
         step.setDescription(template.getDescription());
         step.setType(template.getType());
-        step.setStatus("NEW"); // reset status
+        step.setStatus("NEW");
         step.setMaxArgs(template.getMaxArgs());
 
         template.getExtras().forEach((k, v) -> step.setExtra(k, ""));
-        step.setNew(true); // mark as new row
+        step.setNew(true);
         return step;
     }
 
@@ -132,6 +130,11 @@ public class TestStep {
     // --- Flags ---
     public boolean isNew() { return isNew; }
     public void setNew(boolean value) { this.isNew = value; }
+
+    // --- Selection ---
+    public BooleanProperty selectedProperty() { return selected; }
+    public boolean isSelected() { return selected.get(); }
+    public void setSelected(boolean value) { selected.set(value); }
 
     // --- Getters ---
     public String getItem() { return item.get(); }
@@ -152,18 +155,18 @@ public class TestStep {
     public void setStatus(String value) { this.status.set(value); }
 
     // --- Property accessors ---
-    public SimpleStringProperty itemProperty() { return item; }
-    public SimpleStringProperty actionProperty() { return action; }
-    public SimpleStringProperty objectProperty() { return object; }
-    public SimpleStringProperty inputProperty() { return input; }
-    public SimpleStringProperty descriptionProperty() { return description; }
-    public SimpleStringProperty typeProperty() { return type; }
-    public SimpleStringProperty statusProperty() { return status; }
+    public StringProperty itemProperty() { return item; }
+    public StringProperty actionProperty() { return action; }
+    public StringProperty objectProperty() { return object; }
+    public StringProperty inputProperty() { return input; }
+    public StringProperty descriptionProperty() { return description; }
+    public StringProperty typeProperty() { return type; }
+    public StringProperty statusProperty() { return status; }
 
     // --- Extras ---
-    public SimpleStringProperty getExtraProperty(String columnName) {
+    public StringProperty getExtraProperty(String columnName) {
         return extras.computeIfAbsent(columnName, k -> {
-            SimpleStringProperty prop = new SimpleStringProperty("");
+            StringProperty prop = new SimpleStringProperty("");
             attachDirtyListener(prop, k);
             return prop;
         });
@@ -172,15 +175,15 @@ public class TestStep {
     public String getExtra(String columnName) { return getExtraProperty(columnName).get(); }
     public void setExtra(String columnName, String value) { getExtraProperty(columnName).set(value); }
 
-    public Map<String, SimpleStringProperty> getExtras() {
+    public Map<String, StringProperty> getExtras() {
         return Collections.unmodifiableMap(extras);
     }
 
-    public void setExtras(Map<String, SimpleStringProperty> newExtras) {
+    public void setExtras(Map<String, StringProperty> newExtras) {
         extras.clear();
         if (newExtras != null) {
             newExtras.forEach((key, prop) -> {
-                SimpleStringProperty copy = new SimpleStringProperty(prop.get());
+                StringProperty copy = new SimpleStringProperty(prop.get());
                 attachDirtyListener(copy, key);
                 extras.put(key, copy);
             });
@@ -195,12 +198,12 @@ public class TestStep {
     public List<String> getArgs() {
         if (extras.isEmpty()) return List.of();
         return extras.values().stream()
-                .map(SimpleStringProperty::get)
+                .map(StringProperty::get)
                 .toList();
     }
 
     // --- Dirty tracking ---
-    private void attachDirtyListener(SimpleStringProperty prop, String key) {
+    private void attachDirtyListener(StringProperty prop, String key) {
         prop.addListener((obs, oldVal, newVal) -> {
             MainController.markTableDirty();
             System.out.printf("Edited arg=%s, newValue=%s%n", key, newVal);
@@ -208,7 +211,7 @@ public class TestStep {
     }
 
     // --- Utility: convert extras to plain map ---
-    public static Map<String, String> toStringMap(Map<String, SimpleStringProperty> original) {
+    public static Map<String, String> toStringMap(Map<String, StringProperty> original) {
         if (original == null) return null;
         Map<String, String> copy = new LinkedHashMap<>();
         original.forEach((k, v) -> copy.put(k, v.get()));
@@ -226,6 +229,7 @@ public class TestStep {
                 ", description=" + getDescription() +
                 ", type=" + getType() +
                 ", status=" + getStatus() +
+                ", selected=" + isSelected() +
                 ", maxArgs=" + maxArgs +
                 ", extras=" + extras.entrySet().stream()
                 .map(e -> e.getKey() + "=" + e.getValue().get())
