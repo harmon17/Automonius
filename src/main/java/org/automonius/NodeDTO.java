@@ -6,28 +6,32 @@ import java.util.*;
  * Data Transfer Object (DTO) for persisting and restoring the TreeView hierarchy.
  * Captures both Scenario-level and Step-level fields in plain Java types
  * (Strings, Maps, Lists) for safe JSON serialization.
+ *
+ * - Scenario nodes: store scenario status and extras.
+ * - Step nodes: store core fields, step-specific extras, and references to global args.
  */
 public class NodeDTO {
     private String id;
     private NodeType type;
 
     // --- Common fields ---
-    private String name;                  // for Suite/SubSuite/Scenario labels
+    private String name;                        // Suite/SubSuite/Scenario/Step label
     private List<NodeDTO> children = new ArrayList<>();
 
     // --- Scenario-specific fields ---
-    private String scenarioStatus;        // aggregated status (PASS/FAIL/PENDING)
+    private String scenarioStatus;              // aggregated status (PASS/FAIL/PENDING)
     private Map<String, String> scenarioExtras; // scenario-level extras (argument headers)
 
     // --- Step-specific fields ---
-    private String item;                  // primary variable reference
-    private String action;                // action name
-    private String object;                // object name
-    private String input;                 // first argument
-    private String description;           // step description
-    private String stepType;              // classification of step
-    private String stepStatus;            // execution result
-    private Map<String, String> stepExtras; // dynamic argument values
+    private String item;                        // primary variable reference
+    private String action;                      // action name
+    private String object;                      // object name
+    private String input;                       // first argument
+    private String description;                 // step description
+    private String stepType;                    // classification of step
+    private String stepStatus;                  // execution result
+    private Map<String, String> stepExtras;     // dynamic argument values (local)
+    private Map<String, String> stepGlobals;    // linked global args (references + values)
 
     // --- Getters & Setters ---
     public String getId() { return id; }
@@ -73,4 +77,7 @@ public class NodeDTO {
 
     public Map<String, String> getStepExtras() { return stepExtras; }
     public void setStepExtras(Map<String, String> stepExtras) { this.stepExtras = stepExtras; }
+
+    public Map<String, String> getStepGlobals() { return stepGlobals; }
+    public void setStepGlobals(Map<String, String> stepGlobals) { this.stepGlobals = stepGlobals; }
 }

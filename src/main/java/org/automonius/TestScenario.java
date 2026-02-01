@@ -94,26 +94,43 @@ public class TestScenario {
     }
 
     // --- ID ---
-    public String getId() { return id; }
+    public String getId() {
+        return id;
+    }
 
     // --- Name ---
-    public String getName() { return name.get(); }
+    public String getName() {
+        return name.get();
+    }
+
     public void setName(String newName) {
         log.fine(() -> "Renaming scenario " + id + " from " + this.name.get() + " to " + newName);
         this.name.set(newName);
     }
-    public StringProperty nameProperty() { return name; }
+
+    public StringProperty nameProperty() {
+        return name;
+    }
 
     // --- Status ---
-    public String getStatus() { return status.get(); }
+    public String getStatus() {
+        return status.get();
+    }
+
     public void setStatus(String newStatus) {
         log.fine(() -> "Scenario " + id + " status changed to " + newStatus);
         this.status.set(newStatus);
     }
-    public StringProperty statusProperty() { return status; }
+
+    public StringProperty statusProperty() {
+        return status;
+    }
 
     // --- Steps ---
-    public ObservableList<TestStep> getSteps() { return steps; }
+    public ObservableList<TestStep> getSteps() {
+        return steps;
+    }
+
     public void addStep(TestStep step) {
         steps.add(step);
         log.fine(() -> "Added step to scenario " + id + ": " + step);
@@ -125,13 +142,14 @@ public class TestScenario {
     }
 
 
-    public void setExtras(Map<String, SimpleStringProperty> newExtras) {
+    public void setExtras(Map<String, StringProperty> newExtras) {
         extras.clear();
         if (newExtras != null) {
-            newExtras.forEach((key, prop) -> extras.put(key, new SimpleStringProperty(prop.get())));
+            extras.putAll(newExtras); // direct copy, no type mismatch
         }
         log.fine(() -> "Set extras for scenario " + id + ": " + extras);
     }
+
 
     public void addExtra(String extraName) {
         extras.put(extraName, new SimpleStringProperty(""));
@@ -157,7 +175,10 @@ public class TestScenario {
     }
 
     // --- Convenience helpers ---
-    public List<String> getExtraNames() { return new ArrayList<>(extras.keySet()); }
+    public List<String> getExtraNames() {
+        return new ArrayList<>(extras.keySet());
+    }
+
     public List<String> getExtraValues() {
         return extras.values().stream()
                 .map(StringProperty::get)   // ✅ use StringProperty here

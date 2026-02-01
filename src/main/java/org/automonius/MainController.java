@@ -244,7 +244,6 @@ public class MainController {
     // --- Initialize first step defaults ---
     private void initializeDefaults() {
         if (!steps.isEmpty()) {
-            // ✅ Ensure the very first step has a UUID
             TestStep blank = steps.get(0);
             if (blank.getId() == null || blank.getId().isBlank()) {
                 TestStep copyWithId = TestStep.deepCopy(blank);
@@ -261,7 +260,7 @@ public class MainController {
                 String defaultAction = actionsByObject.getOrDefault(defaultObject, List.of())
                         .stream().findFirst().orElse(null);
 
-                List<String> defaultArgs = argsByObject.getOrDefault(defaultObject, List.of());
+                List<String> defaultArgs = ArgRegistry.getArgsForAction(defaultAction);
 
                 blank.setObject(defaultObject);
                 blank.setAction(defaultAction);
@@ -272,15 +271,16 @@ public class MainController {
                                 (a, b) -> a,
                                 LinkedHashMap::new
                         )));
-                blank.setMaxArgs(defaultArgs.size());
+                blank.setMaxArgs(defaultArgs.size()); // ✅ align maxArgs
 
                 log.info("Initialized with default object=" + defaultObject +
                         ", action=" + defaultAction +
                         ", args=" + defaultArgs +
-                        ", id=" + blank.getId()); // ✅ log ID for confirmation
+                        ", id=" + blank.getId());
             }
         }
     }
+
 
 
     // --- TreeView setup ---
@@ -1524,11 +1524,11 @@ public class MainController {
                 extraNames.add(colHeaderRow.getCell(i).getStringCellValue());
             }
 
-            // Build scenario-level extras as Map<String, SimpleStringProperty>
-            Map<String, SimpleStringProperty> extrasMap = extraNames.stream()
+            // ✅ Build scenario-level extras as Map<String, StringProperty>
+            Map<String, StringProperty> extrasMap = extraNames.stream()
                     .collect(Collectors.toMap(
                             name -> name,
-                            name -> new SimpleStringProperty(""),
+                            name -> new SimpleStringProperty(""), // still fine, implements StringProperty
                             (a, b) -> a,
                             LinkedHashMap::new
                     ));
@@ -1565,6 +1565,7 @@ public class MainController {
             return null;
         }
     }
+
 
 
     public TestSuite importSuiteFromFile(File file) {
@@ -1606,15 +1607,15 @@ public class MainController {
                         extraNames.add(colHeaderRow.getCell(i).getStringCellValue());
                     }
 
-                    // Build scenario-level extras as Map<String, SimpleStringProperty>
-                    Map<String, SimpleStringProperty> extrasMap = extraNames.stream()
+                    // Build scenario-level extras as Map<String, StringProperty>
+                    Map<String, StringProperty> extrasMap = extraNames.stream()
                             .collect(Collectors.toMap(
                                     name -> name,
-                                    name -> new SimpleStringProperty(""),
+                                    name -> new SimpleStringProperty(""), // still fine, implements StringProperty
                                     (a, b) -> a,
                                     LinkedHashMap::new
                             ));
-                    scenario.setExtras(extrasMap);
+                    scenario.setExtras(extrasMap); // ✅ compiles cleanly
 
                     // Step rows until next marker
                     while (++r <= sheet.getLastRowNum()) {
@@ -2053,7 +2054,8 @@ public class MainController {
                         .stream().findFirst().orElse("");
                 newStep.setAction(defaultAction);
 
-                List<String> defaultArgs = argsByObject.getOrDefault(defaultObject, List.of());
+                // ✅ Use ArgRegistry instead of argsByObject
+                List<String> defaultArgs = ArgRegistry.getArgsForAction(defaultAction);
                 Map<String, StringProperty> extras = defaultArgs.stream()
                         .collect(Collectors.toMap(
                                 arg -> arg,
@@ -2076,15 +2078,18 @@ public class MainController {
             ObservableList<TestStep> boundList = scenarioSteps.get(scenario.getId());
             if (boundList != null) {
                 boundList.add(persistedStep);
-                tableView.getSelectionModel().select(persistedStep);
             } else {
                 ObservableList<TestStep> stepsCopy = FXCollections.observableArrayList(
                         scenario.getSteps().stream().map(TestStep::deepCopy).toList()
                 );
                 scenarioSteps.put(scenario.getId(), stepsCopy);
                 tableView.setItems(stepsCopy);
-                tableView.getSelectionModel().select(persistedStep);
             }
+
+            // ✅ Always bind and refresh
+            tableView.setItems(scenarioSteps.get(scenario.getId()));
+            tableView.getSelectionModel().select(persistedStep);
+            tableView.refresh();
 
             refreshScenarioUI(scenario);
             saveTree(treeView.getRoot());
@@ -2092,6 +2097,8 @@ public class MainController {
 
         log.info(() -> "Added new step to scenario " + scenario.getId() + ": " + newStep);
     }
+
+
 
 
     // Helper to copy extras
@@ -2109,6 +2116,14 @@ public class MainController {
     public static TestStep deepCopy(TestStep original) {
         if (original == null) return null;
 
+        // Copy step extras as properties
+        Map<String, StringProperty> extrasCopy = new LinkedHashMap<>();
+        if (original.getExtras() != null) {
+            original.getExtras().forEach((k, v) ->
+                    extrasCopy.put(k, new SimpleStringProperty(v.get()))
+            );
+        }
+
         // Use the explicit constructor with ID to preserve the original ID if needed
         TestStep copy = new TestStep(
                 original.getId(),                  // preserve ID
@@ -2119,7 +2134,7 @@ public class MainController {
                 original.getDescription(),
                 original.getType(),
                 original.getStatus(),
-                toStringMap(original.getExtras()), // convert extras to plain map
+                extrasCopy,                        // ✅ now Map<String,StringProperty>
                 original.getMaxArgs(),
                 original.isNew()
         );
@@ -2135,6 +2150,7 @@ public class MainController {
 
         return copy;
     }
+
 
 
 
@@ -3285,10 +3301,10 @@ public class MainController {
                     dto.getChildren().add(toDTO(child));
                 }
             }
+
             case TEST_SCENARIO -> {
                 TestScenario scenario = node.getScenarioRef();
                 if (scenario != null) {
-                    // ✅ Keep dto.name from node.getName(), do not overwrite
                     dto.setScenarioStatus(scenario.getStatus());
                     dto.setScenarioExtras(
                             scenario.getExtras() != null ? TestStep.toStringMap(scenario.getExtras()) : null
@@ -3298,38 +3314,16 @@ public class MainController {
                             scenarioSteps.getOrDefault(scenario.getId(), scenario.getSteps());
 
                     for (TestStep step : stepsToSave) {
-                        NodeDTO stepDTO = new NodeDTO();
-                        stepDTO.setId(step.getId());
-                        stepDTO.setType(NodeType.TEST_STEP);
-                        stepDTO.setItem(step.getItem());
-                        stepDTO.setAction(step.getAction());
-                        stepDTO.setObject(step.getObject());
-                        stepDTO.setInput(step.getInput());
-                        stepDTO.setDescription(step.getDescription());
-                        stepDTO.setStepType(step.getType());
-                        stepDTO.setStepStatus(step.getStatus());
-                        stepDTO.setStepExtras(
-                                step.getExtras() != null ? TestStep.toStringMap(step.getExtras()) : null
-                        );
-
-                        dto.getChildren().add(stepDTO);
+                        dto.getChildren().add(toStepDTO(step));
                     }
                 }
             }
+
             case TEST_STEP -> {
                 TestStep step = node.getStepRef();
                 if (step != null) {
-                    dto.setId(step.getId());
-                    dto.setItem(step.getItem());
-                    dto.setAction(step.getAction());
-                    dto.setObject(step.getObject());
-                    dto.setInput(step.getInput());
-                    dto.setDescription(step.getDescription());
-                    dto.setStepType(step.getType());
-                    dto.setStepStatus(step.getStatus());
-                    dto.setStepExtras(
-                            step.getExtras() != null ? TestStep.toStringMap(step.getExtras()) : null
-                    );
+                    // ✅ Simplified: just return the stepDTO directly
+                    return toStepDTO(step);
                 }
             }
         }
@@ -3338,73 +3332,92 @@ public class MainController {
     }
 
 
+    /**
+     * Helper to persist a TestStep into a NodeDTO.
+     */
+    private NodeDTO toStepDTO(TestStep step) {
+        NodeDTO stepDTO = new NodeDTO();
+        stepDTO.setId(step.getId());
+        stepDTO.setType(NodeType.TEST_STEP);
+        stepDTO.setItem(step.getItem());
+        stepDTO.setAction(step.getAction());
+        stepDTO.setObject(step.getObject());
+        stepDTO.setInput(step.getInput());
+        stepDTO.setDescription(step.getDescription());
+        stepDTO.setStepType(step.getType());
+        stepDTO.setStepStatus(step.getStatus());
+
+        // ✅ Persist step extras
+        stepDTO.setStepExtras(
+                step.getExtras() != null ? TestStep.toStringMap(step.getExtras()) : null
+        );
+
+        // ✅ Persist global arg linkages
+        if (step.getGlobalExtras() != null && !step.getGlobalExtras().isEmpty()) {
+            Map<String, String> globalsMap = new LinkedHashMap<>();
+            step.getGlobalExtras().forEach((k, v) -> globalsMap.put(k, v.get()));
+            stepDTO.setStepGlobals(globalsMap);
+        }
+
+        return stepDTO;
+    }
+
     private TreeItem<TestNode> fromDTO(NodeDTO dto) {
-        // 🔥 Ensure TestNode is created with the persisted name
+        if (dto == null) return null;
+
+        // --- Create base TestNode ---
         TestNode node = new TestNode(dto.getId(), dto.getName(), dto.getType());
-        node.setName(dto.getName()); // make sure bound property is updated
+        node.setName(dto.getName()); // ensure bound property is updated
 
-        if (dto.getType() == NodeType.SUITE || dto.getType() == NodeType.SUB_SUITE) {
-            TestSuite suite = new TestSuite(dto.getId(), dto.getName());
-            suite.setName(dto.getName());   // restore suite name
-            node.setSuiteRef(suite);
-        }
-
-        if (dto.getType() == NodeType.TEST_SCENARIO) {
-            TestScenario scenario = new TestScenario(dto.getId(), dto.getName());
-            scenario.setName(dto.getName());   // restore scenario name
-            scenario.setStatus(dto.getScenarioStatus());
-
-            if (dto.getScenarioExtras() != null) {
-                Map<String, SimpleStringProperty> extrasMap = new LinkedHashMap<>();
-                dto.getScenarioExtras().forEach((k, v) -> extrasMap.put(k, new SimpleStringProperty(v)));
-                scenario.setExtras(extrasMap);
+        switch (dto.getType()) {
+            case SUITE, SUB_SUITE -> {
+                TestSuite suite = new TestSuite(dto.getId(), dto.getName());
+                suite.setName(dto.getName());
+                node.setSuiteRef(suite);
             }
 
-            ObservableList<TestStep> restoredSteps = FXCollections.observableArrayList();
-            if (dto.getChildren() != null) {
-                for (NodeDTO stepDTO : dto.getChildren()) {
-                    TestStep step = new TestStep(
-                            stepDTO.getId(),
-                            stepDTO.getItem(),
-                            stepDTO.getAction(),
-                            stepDTO.getObject(),
-                            stepDTO.getInput(),
-                            stepDTO.getDescription(),
-                            stepDTO.getStepType(),
-                            stepDTO.getStepStatus(),
-                            stepDTO.getStepExtras() != null ? stepDTO.getStepExtras() : new HashMap<>(),
-                            stepDTO.getStepExtras() != null ? stepDTO.getStepExtras().size() : 0,
-                            false
+            case TEST_SCENARIO -> {
+                TestScenario scenario = new TestScenario(dto.getId(), dto.getName());
+                scenario.setName(dto.getName());
+                scenario.setStatus(dto.getScenarioStatus());
+
+                // --- Restore scenario extras ---
+                if (dto.getScenarioExtras() != null) {
+                    Map<String, StringProperty> extrasMap = new LinkedHashMap<>();
+                    dto.getScenarioExtras().forEach((k, v) ->
+                            extrasMap.put(k, new SimpleStringProperty(v))
                     );
-                    restoredSteps.add(step);
+                    scenario.setExtras(extrasMap); // ✅ live properties
                 }
+
+                // --- Restore steps ---
+                ObservableList<TestStep> restoredSteps = FXCollections.observableArrayList();
+                if (dto.getChildren() != null) {
+                    for (NodeDTO stepDTO : dto.getChildren()) {
+                        TestStep step = restoreStep(stepDTO); // ✅ builds StringProperty maps
+                        restoredSteps.add(step);
+                    }
+                }
+
+                scenario.getSteps().setAll(restoredSteps);
+                scenarioSteps.put(scenario.getId(), restoredSteps);
+                node.setScenarioRef(scenario);
             }
 
-            scenario.getSteps().setAll(restoredSteps);
-            scenarioSteps.put(scenario.getId(), restoredSteps);
-            node.setScenarioRef(scenario);
+            case TEST_STEP -> {
+                TestStep step = restoreStep(dto); // ✅ builds StringProperty maps
+                node.setStepRef(step);
+            }
+
+            default -> {
+                // ROOT or other types handled below
+            }
         }
 
-        if (dto.getType() == NodeType.TEST_STEP) {
-            TestStep step = new TestStep(
-                    dto.getId(),
-                    dto.getItem(),
-                    dto.getAction(),
-                    dto.getObject(),
-                    dto.getInput(),
-                    dto.getDescription(),
-                    dto.getStepType(),
-                    dto.getStepStatus(),
-                    dto.getStepExtras() != null ? dto.getStepExtras() : new HashMap<>(),
-                    dto.getStepExtras() != null ? dto.getStepExtras().size() : 0,
-                    false
-            );
-            node.setStepRef(step);
-        }
-
-
+        // --- Build tree item ---
         TreeItem<TestNode> item = buildTreeItem(node);
 
+        // --- Recursively restore children for container nodes ---
         if (dto.getChildren() != null &&
                 (dto.getType() == NodeType.ROOT ||
                         dto.getType() == NodeType.SUITE ||
@@ -3415,6 +3428,58 @@ public class MainController {
         }
 
         return item;
+    }
+
+
+
+    /**
+     * Helper to restore a TestStep from its DTO.
+     */
+    private TestStep restoreStep(NodeDTO stepDTO) {
+        // --- Restore extras ---
+        Map<String, StringProperty> extrasMap = new LinkedHashMap<>();
+        if (stepDTO.getStepExtras() != null) {
+            stepDTO.getStepExtras().forEach((k, v) ->
+                    extrasMap.put(k, new SimpleStringProperty(v))
+            );
+        }
+
+        TestStep step = new TestStep(
+                stepDTO.getId(),
+                stepDTO.getItem(),
+                stepDTO.getAction(),
+                stepDTO.getObject(),
+                stepDTO.getInput(),
+                stepDTO.getDescription(),
+                stepDTO.getStepType(),
+                stepDTO.getStepStatus(),
+                extrasMap,                // ✅ live properties
+                extrasMap.size(),
+                false
+        );
+
+        // --- Restore global arg linkages ---
+        if (stepDTO.getStepGlobals() != null) {
+            stepDTO.getStepGlobals().forEach((key, value) -> {
+                StringProperty globalProp = GlobalArgsManager.getGlobalArgs().get(key);
+                if (globalProp != null) {
+                    step.setGlobalExtra(key, globalProp); // reuse live global
+                    globalProp.set(value);                // sync value
+                } else {
+                    step.setGlobalExtra(key, new SimpleStringProperty(value));
+                }
+            });
+        }
+
+        // --- Inject missing args based on action ---
+        List<String> expectedArgs = ArgRegistry.getArgsForAction(stepDTO.getAction());
+        for (String arg : expectedArgs) {
+            if (!step.getExtras().containsKey(arg) && !step.getGlobalExtras().containsKey(arg)) {
+                step.setExtra(arg, ""); // blank manual entry
+            }
+        }
+
+        return step;
     }
 
 
@@ -3512,6 +3577,9 @@ public class MainController {
             restoredRoot.setExpanded(true);
             treeView.setRoot(restoredRoot);
 
+            // --- Refresh ListView from restored step maps ---
+            refreshResolvedVariableList();
+
             // Track which file is active for saving later
             currentProjectFile = file;
 
@@ -3522,6 +3590,8 @@ public class MainController {
             log.severe("Failed to load project: " + e.getMessage());
         }
     }
+
+
 
     @FXML
     private void handleLoadProject(ActionEvent event) {
@@ -3848,7 +3918,6 @@ public class MainController {
                 super.updateItem(entry, empty);
 
                 if (empty || entry == null) {
-                    // clear bindings when cell is empty
                     textField.textProperty().unbind();
                     setGraphic(null);
                     setText(null);
@@ -3860,19 +3929,58 @@ public class MainController {
                     setGraphic(null);
                     setStyle("-fx-background-color: #f0f0f0; -fx-font-weight: bold; -fx-text-fill: #1a73e8;");
                 } else {
-                    // clear any old binding
                     textField.textProperty().unbind();
-
-                    // bind to current entry
                     textField.textProperty().bindBidirectional(entry.valueProperty());
 
-                    // visual cue for globals
                     if (entry.isGlobal()) {
                         textField.setStyle("-fx-text-fill: blue; -fx-font-weight: bold;");
                         textField.setPromptText("[GLOBAL] " + entry.getName());
+
+                        // --- Detect manual override of a global ---
+                        textField.textProperty().addListener((obs, oldVal, newVal) -> {
+                            if (newVal != null && !newVal.equals(oldVal)) {
+                                TestStep step = tableView.getSelectionModel().getSelectedItem();
+                                if (step != null) {
+                                    // --- Transition: global → manual ---
+                                    step.demoteToExtra(entry.getName(), newVal);
+
+                                    // rebind entry to its own property
+                                    entry.valueProperty().unbind();
+                                    entry.valueProperty().bindBidirectional(step.getExtraProperty(entry.getName()));
+
+                                    refreshResolvedVariableList();
+
+                                    logExecutionEvent("ARG", String.format(
+                                            "row=%d, stepId=%s, arg=%s (demoted to manual value=%s)",
+                                            entry.getRowIndex(),
+                                            entry.getStepId(),
+                                            entry.getName(),
+                                            newVal
+                                    ));
+                                }
+                            }
+                        });
                     } else {
                         textField.setStyle("");
                         textField.setPromptText(entry.getName());
+
+                        // --- Persist manual edits into stepExtras ---
+                        textField.textProperty().addListener((obs, oldVal, newVal) -> {
+                            if (newVal != null && !newVal.equals(oldVal)) {
+                                TestStep step = tableView.getSelectionModel().getSelectedItem();
+                                if (step != null) {
+                                    step.setExtra(entry.getName(), newVal);
+
+                                    logExecutionEvent("ARG", String.format(
+                                            "row=%d, stepId=%s, arg=%s (manual value=%s)",
+                                            entry.getRowIndex(),
+                                            entry.getStepId(),
+                                            entry.getName(),
+                                            newVal
+                                    ));
+                                }
+                            }
+                        });
                     }
 
                     setGraphic(textField);
@@ -3906,18 +4014,28 @@ public class MainController {
                         ArgEntry entry = resolvedVariableList.getSelectionModel().getSelectedItem();
 
                         if (step != null && entry != null && !entry.isHeader()) {
-                            applyGlobalArgValueToStep(step, entry.getName(), arg.getValue());
-                            refreshResolvedVariableList();
-                            suggestions.hide();
+                            StringProperty globalProp = GlobalArgsManager.getGlobalArgs().get(arg.getFieldName());
+                            if (globalProp != null) {
+                                // --- Transition: manual → global ---
+                                step.promoteToGlobal(entry.getName(), globalProp);
 
-                            logExecutionEvent("ARG", String.format(
-                                    "row=%d, stepId=%s, arg=%s, value=%s (applied global %s)",
-                                    entry.getRowIndex(),
-                                    entry.getStepId(),
-                                    entry.getName(),
-                                    arg.getValue(),
-                                    label
-                            ));
+                                // --- Guard against self‑binding ---
+                                if (entry.valueProperty() != globalProp) {
+                                    entry.valueProperty().unbind();
+                                    entry.valueProperty().bindBidirectional(globalProp);
+                                }
+
+                                refreshResolvedVariableList();
+                                suggestions.hide();
+
+                                logExecutionEvent("ARG", String.format(
+                                        "row=%d, stepId=%s, arg=%s (bound to global %s)",
+                                        entry.getRowIndex(),
+                                        entry.getStepId(),
+                                        entry.getName(),
+                                        arg.getFieldName()
+                                ));
+                            }
                         }
                     });
 
@@ -3928,8 +4046,6 @@ public class MainController {
             }
         });
     }
-
-
 
 
 
@@ -4022,21 +4138,7 @@ public class MainController {
 
         for (TestStep step : allSteps) {
             if (step == null) {
-                rowIndex++;
-                continue;
-            }
-
-            // --- Ensure extras are linked ---
-            Map<String, StringProperty> extras = step.getExtras();
-            if (extras == null || !(extras instanceof LinkedHashMap)) {
-                extras = new LinkedHashMap<>();
-                step.setExtras(extras);
-            }
-
-            // --- Add missing args based on action ---
-            List<String> args = argsByAction.getOrDefault(step.getAction(), List.of());
-            for (String arg : args) {
-                extras.computeIfAbsent(arg, k -> new SimpleStringProperty(""));
+                continue; // ✅ skip without bumping rowIndex
             }
 
             // --- Add header entry for this row ---
@@ -4045,51 +4147,45 @@ public class MainController {
                 updatedEntries.add(new ArgEntry(
                         rowIndex,
                         step.getId(),
-                        "Row " + rowIndex + ": " + action,
-                        new SimpleStringProperty("") // header only
+                        "Row " + rowIndex + ": " + action // header only
                 ));
             }
 
             // --- Add step extras (manual entries) ---
-            for (Map.Entry<String, StringProperty> entry : extras.entrySet()) {
-                ArgEntry existing = findExisting(items, rowIndex, step.getId(), entry.getKey());
-                if (existing != null) {
-                    updatedEntries.add(existing); // reuse existing
-                } else {
+            Map<String, StringProperty> extras = step.getExtras();
+            if (extras != null && !extras.isEmpty()) {
+                for (Map.Entry<String, StringProperty> entry : extras.entrySet()) {
                     updatedEntries.add(new ArgEntry(
                             rowIndex,
                             step.getId(),
                             entry.getKey(),
-                            entry.getValue() // reuse property directly
+                            entry.getValue(),
+                            false // manual
                     ));
                 }
             }
 
             // --- Add global extras (manager-linked) ---
-            if (step.getGlobalExtras() != null) {
-                for (Map.Entry<String, StringProperty> global : step.getGlobalExtras().entrySet()) {
-                    ArgEntry existing = findExisting(items, rowIndex, step.getId(), global.getKey());
-                    if (existing != null) {
-                        updatedEntries.add(existing); // reuse existing
-                    } else {
-                        updatedEntries.add(new ArgEntry(
-                                rowIndex,
-                                step.getId(),
-                                global.getKey(),
-                                global.getValue(), // reuse manager property
-                                true // mark as global
-                        ));
-                    }
+            Map<String, StringProperty> globals = step.getGlobalExtras();
+            if (globals != null && !globals.isEmpty()) {
+                for (Map.Entry<String, StringProperty> global : globals.entrySet()) {
+                    updatedEntries.add(new ArgEntry(
+                            rowIndex,
+                            step.getId(),
+                            global.getKey(),
+                            global.getValue(),
+                            true // global
+                    ));
                 }
             }
 
-            rowIndex++;
+            rowIndex++; // ✅ increment only after processing a real step
         }
 
-        // --- Update list in place ---
+        // --- Replace list entirely ---
         items.setAll(updatedEntries);
 
-        log.info("ResolvedVariableList refreshed with " + items.size() + " entries (including headers + globals).");
+        log.info("ResolvedVariableList refreshed with " + items.size() + " entries (headers + extras + globals).");
     }
 
     // Helper to find existing ArgEntry

@@ -2,38 +2,48 @@ package org.automonius.Controller;
 
 import javafx.beans.property.StringProperty;
 
+/**
+ * ArgEntry is a lightweight UI wrapper for arguments in the ListView.
+ * It does not hold its own memory — it simply references the underlying
+ * StringProperty from TestStep.extras or TestStep.globalExtras.
+ */
 public class ArgEntry {
     private final int rowIndex;
     private final String stepId;
     private final String name;
-    private final StringProperty value;
+    private final StringProperty boundValue; // reference to TestStep property
     private final boolean isHeader;
     private final boolean isGlobal;
 
-    // Normal arg entry
-    public ArgEntry(int rowIndex, String stepId, String name, StringProperty value) {
-        this(rowIndex, stepId, name, value, false, name.startsWith("Row "));
-    }
-
-    // Global arg entry
-    public ArgEntry(int rowIndex, String stepId, String name, StringProperty value, boolean isGlobal) {
-        this(rowIndex, stepId, name, value, isGlobal, name.startsWith("Row "));
-    }
-
-    private ArgEntry(int rowIndex, String stepId, String name, StringProperty value,
-                     boolean isGlobal, boolean isHeader) {
+    // Header entry (no bound value)
+    public ArgEntry(int rowIndex, String stepId, String name) {
         this.rowIndex = rowIndex;
         this.stepId = stepId;
         this.name = name;
-        this.value = value;
+        this.boundValue = null;
+        this.isGlobal = false;
+        this.isHeader = true;
+    }
+
+    // Manual arg entry
+    public ArgEntry(int rowIndex, String stepId, String name, StringProperty boundValue) {
+        this(rowIndex, stepId, name, boundValue, false);
+    }
+
+    // Global arg entry
+    public ArgEntry(int rowIndex, String stepId, String name, StringProperty boundValue, boolean isGlobal) {
+        this.rowIndex = rowIndex;
+        this.stepId = stepId;
+        this.name = name;
+        this.boundValue = boundValue; // reference to TestStep map property
         this.isGlobal = isGlobal;
-        this.isHeader = isHeader;
+        this.isHeader = false;
     }
 
     public int getRowIndex() { return rowIndex; }
     public String getStepId() { return stepId; }
     public String getName() { return name; }
-    public StringProperty valueProperty() { return value; }
+    public StringProperty valueProperty() { return boundValue; }
     public boolean isHeader() { return isHeader; }
     public boolean isGlobal() { return isGlobal; }
 
@@ -42,6 +52,6 @@ public class ArgEntry {
         if (isHeader) return name;
         return (isGlobal ? "[GLOBAL] " : "") +
                 "Row " + rowIndex + " [" + stepId + "] " +
-                name + "=" + value.get();
+                name + "=" + (boundValue != null ? boundValue.get() : "");
     }
 }

@@ -1,16 +1,15 @@
 package org.automonius;
 
-import javafx.beans.property.BooleanProperty;
-import javafx.beans.property.SimpleBooleanProperty;
-import javafx.beans.property.SimpleStringProperty;
-import javafx.beans.property.StringProperty;
+import javafx.beans.property.*;
 import org.automonius.Controller.ArgEntry;
 import org.automonius.exec.TestCase;
 
 import java.util.*;
 
+
 /**
  * Represents a single test step row in the TableView.
+ * Extras and global extras are stored as JavaFX StringProperty for live binding.
  */
 public class TestStep {
 
@@ -28,16 +27,13 @@ public class TestStep {
 
     // --- Extras ---
     private final Map<String, StringProperty> extras = new LinkedHashMap<>();       // step-specific args
-    private final Map<String, StringProperty> globalExtras = new LinkedHashMap<>(); // global args separated
+    private final Map<String, StringProperty> globalExtras = new LinkedHashMap<>(); // global args
 
     private int maxArgs = 0;
-
-    // --- Flags ---
     private boolean isNew = false;
 
     // --- Selection flag for multi-run ---
     private final BooleanProperty selected = new SimpleBooleanProperty(false);
-
 
     // --- Constructors ---
 
@@ -58,9 +54,7 @@ public class TestStep {
                 tc.getInputs().isEmpty() ? "" : tc.getInputs().get(0),
                 tc.getDescription(), "Step", "NEW", null, tc.getInputs().size(), true);
 
-        for (String arg : tc.getInputs()) {
-            this.setExtra(arg, "");
-        }
+        tc.getInputs().forEach(arg -> this.setExtra(arg, ""));
     }
 
     /** Deep copy constructor (preserve ID) */
@@ -68,16 +62,27 @@ public class TestStep {
         this(original.getId() == null || original.getId().isBlank()
                         ? UUID.randomUUID().toString()
                         : original.getId(),
-                original.getItem(), original.getAction(), original.getObject(),
-                original.getInput(), original.getDescription(),
-                original.getType(), original.getStatus(),
-                toStringMap(original.getExtras()), original.getMaxArgs(), false);
+                original.getItem(),
+                original.getAction(),
+                original.getObject(),
+                original.getInput(),
+                original.getDescription(),
+                original.getType(),
+                original.getStatus(),
+                original.getExtras(),   // ✅ pass Map<String,StringProperty>
+                0,                      // placeholder, will be recalculated
+                false);
 
-        // ✅ Copy global extras separately
+        // Copy global extras separately
         original.getGlobalExtras().forEach((k, v) ->
                 this.globalExtras.put(k, new SimpleStringProperty(v.get()))
         );
+
+        // ✅ Recalculate maxArgs from ArgRegistry
+        List<String> expectedArgs = ArgRegistry.getArgsForAction(original.getAction());
+        this.maxArgs = expectedArgs.size();
     }
+
 
 
     /** Explicit constructor with ID (for DTO restore) */
@@ -89,7 +94,7 @@ public class TestStep {
                     String description,
                     String type,
                     String status,
-                    Map<String, String> extrasMap,
+                    Map<String, StringProperty> extrasMap,
                     int maxArgs,
                     boolean isNew) {
         this.id = (id == null || id.isBlank()) ? UUID.randomUUID().toString() : id;
@@ -100,17 +105,21 @@ public class TestStep {
         this.description = new SimpleStringProperty(description == null ? "" : description);
         this.type = new SimpleStringProperty(type == null ? "Step" : type);
         this.status = new SimpleStringProperty(status == null ? "NEW" : status);
-        this.maxArgs = maxArgs;
         this.isNew = isNew;
 
         if (extrasMap != null) {
-            extrasMap.forEach((k, v) -> {
-                StringProperty prop = new SimpleStringProperty(v);
+            extrasMap.forEach((k, prop) -> {
                 attachDirtyListener(prop, k);
                 this.extras.put(k, prop);
             });
         }
+
+        // ✅ Align maxArgs with ArgRegistry
+        List<String> expectedArgs = ArgRegistry.getArgsForAction(action);
+        this.maxArgs = expectedArgs.size();
     }
+
+
 
     // --- Copy helpers ---
     public static TestStep deepCopy(TestStep original) {
@@ -129,19 +138,14 @@ public class TestStep {
         step.setStatus("NEW");
         step.setMaxArgs(template.getMaxArgs());
 
-        // ✅ Copy step extras but blank values
+        // Copy step extras but blank values
         template.getExtras().forEach((k, v) -> step.setExtra(k, ""));
-
-        // ✅ Do NOT copy global extras here
         step.setNew(true);
         return step;
     }
 
-
-    // --- ID ---
+    // --- Identity & Flags ---
     public String getId() { return id; }
-
-    // --- Flags ---
     public boolean isNew() { return isNew; }
     public void setNew(boolean value) { this.isNew = value; }
 
@@ -150,7 +154,7 @@ public class TestStep {
     public boolean isSelected() { return selected.get(); }
     public void setSelected(boolean value) { selected.set(value); }
 
-    // --- Getters ---
+    // --- Core Getters ---
     public String getItem() { return item.get(); }
     public String getAction() { return action.get(); }
     public String getObject() { return object.get(); }
@@ -159,7 +163,7 @@ public class TestStep {
     public String getType() { return type.get(); }
     public String getStatus() { return status.get(); }
 
-    // --- Setters ---
+    // --- Core Setters ---
     public void setItem(String value) { this.item.set(value); }
     public void setAction(String value) { this.action.set(value); }
     public void setObject(String value) { this.object.set(value); }
@@ -188,21 +192,28 @@ public class TestStep {
 
     public String getExtra(String columnName) { return getExtraProperty(columnName).get(); }
     public void setExtra(String columnName, String value) { getExtraProperty(columnName).set(value); }
-
-    public Map<String, StringProperty> getExtras() {
-        return Collections.unmodifiableMap(extras);
-    }
+    public Map<String, StringProperty> getExtras() { return Collections.unmodifiableMap(extras); }
 
     public void setExtras(Map<String, StringProperty> newExtras) {
         extras.clear();
         if (newExtras != null) {
             newExtras.forEach((key, prop) -> {
-                StringProperty copy = new SimpleStringProperty(prop.get());
-                attachDirtyListener(copy, key);
-                extras.put(key, copy);
+                attachDirtyListener(prop, key);
+                extras.put(key, prop);
+            });
+        }
+
+        // --- Ensure expected args remain visible ---
+        List<String> expectedArgs = ArgRegistry.getArgsForAction(getAction());
+        for (String arg : expectedArgs) {
+            extras.computeIfAbsent(arg, k -> {
+                StringProperty prop = new SimpleStringProperty("");
+                attachDirtyListener(prop, k);
+                return prop;
             });
         }
     }
+
 
     // --- MaxArgs ---
     public int getMaxArgs() { return maxArgs; }
@@ -210,10 +221,7 @@ public class TestStep {
 
     // --- Args helper ---
     public List<String> getArgs() {
-        if (extras.isEmpty()) return List.of();
-        return extras.values().stream()
-                .map(StringProperty::get)
-                .toList();
+        return extras.values().stream().map(StringProperty::get).toList();
     }
 
     // --- Dirty tracking ---
@@ -236,17 +244,16 @@ public class TestStep {
     public StringProperty getGlobalExtraProperty(String columnName) {
         return globalExtras.computeIfAbsent(columnName, k -> {
             StringProperty prop = new SimpleStringProperty("");
-            attachDirtyListener(prop, k); // optional: mark dirty when globals change
+            attachDirtyListener(prop, k);
             return prop;
         });
     }
 
-    public String getGlobalExtra(String columnName) {
-        return getGlobalExtraProperty(columnName).get();
-    }
+    public String getGlobalExtra(String columnName) { return getGlobalExtraProperty(columnName).get(); }
 
-    public void setGlobalExtra(String columnName, String value) {
-        getGlobalExtraProperty(columnName).set(value);
+    public void setGlobalExtra(String key, StringProperty valueProp) {
+        attachDirtyListener(valueProp, key);
+        globalExtras.put(key, valueProp);
     }
 
     public Map<String, StringProperty> getGlobalExtras() {
@@ -257,9 +264,8 @@ public class TestStep {
         globalExtras.clear();
         if (newGlobals != null) {
             newGlobals.forEach((key, prop) -> {
-                StringProperty copy = new SimpleStringProperty(prop.get());
-                attachDirtyListener(copy, key);
-                globalExtras.put(key, copy);
+                attachDirtyListener(prop, key);
+                globalExtras.put(key, prop);
             });
         }
     }
@@ -267,16 +273,14 @@ public class TestStep {
     // --- Execution args merge ---
     public Map<String, String> getAllArgsForExecution() {
         Map<String, String> merged = new LinkedHashMap<>();
-
         // Step-specific extras first
         extras.forEach((k, v) -> merged.put(k, v.get()));
-
         // Global extras second (do not overwrite step-specific values)
         globalExtras.forEach((k, v) -> merged.putIfAbsent(k, v.get()));
-
         return merged;
     }
 
+    // --- Convert to ArgEntry list for ListView ---
     public List<ArgEntry> toArgEntries(int rowIndex) {
         List<ArgEntry> entries = new ArrayList<>();
 
@@ -293,9 +297,18 @@ public class TestStep {
         return entries;
     }
 
+    // --- Promote/Demote helpers ---
+    public void promoteToGlobal(String key, StringProperty globalProp) {
+        extras.remove(key);              // remove manual
+        setGlobalExtra(key, globalProp); // add global
+    }
 
+    public void demoteToExtra(String key, String value) {
+        globalExtras.remove(key);        // remove global
+        setExtra(key, value);            // add manual
+    }
 
-
+    // --- Debugging ---
     @Override
     public String toString() {
         return "TestStep{" +
@@ -310,6 +323,9 @@ public class TestStep {
                 ", selected=" + isSelected() +
                 ", maxArgs=" + maxArgs +
                 ", extras=" + extras.entrySet().stream()
+                .map(e -> e.getKey() + "=" + e.getValue().get())
+                .toList() +
+                ", globals=" + globalExtras.entrySet().stream()
                 .map(e -> e.getKey() + "=" + e.getValue().get())
                 .toList() +
                 '}';
