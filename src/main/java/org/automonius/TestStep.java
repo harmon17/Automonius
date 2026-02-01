@@ -4,6 +4,7 @@ import javafx.beans.property.BooleanProperty;
 import javafx.beans.property.SimpleBooleanProperty;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.beans.property.StringProperty;
+import org.automonius.Controller.ArgEntry;
 import org.automonius.exec.TestCase;
 
 import java.util.*;
@@ -26,7 +27,9 @@ public class TestStep {
     private final StringProperty status;
 
     // --- Extras ---
-    private final Map<String, StringProperty> extras = new LinkedHashMap<>();
+    private final Map<String, StringProperty> extras = new LinkedHashMap<>();       // step-specific args
+    private final Map<String, StringProperty> globalExtras = new LinkedHashMap<>(); // global args separated
+
     private int maxArgs = 0;
 
     // --- Flags ---
@@ -34,6 +37,7 @@ public class TestStep {
 
     // --- Selection flag for multi-run ---
     private final BooleanProperty selected = new SimpleBooleanProperty(false);
+
 
     // --- Constructors ---
 
@@ -68,7 +72,13 @@ public class TestStep {
                 original.getInput(), original.getDescription(),
                 original.getType(), original.getStatus(),
                 toStringMap(original.getExtras()), original.getMaxArgs(), false);
+
+        // ✅ Copy global extras separately
+        original.getGlobalExtras().forEach((k, v) ->
+                this.globalExtras.put(k, new SimpleStringProperty(v.get()))
+        );
     }
+
 
     /** Explicit constructor with ID (for DTO restore) */
     public TestStep(String id,
@@ -119,10 +129,14 @@ public class TestStep {
         step.setStatus("NEW");
         step.setMaxArgs(template.getMaxArgs());
 
+        // ✅ Copy step extras but blank values
         template.getExtras().forEach((k, v) -> step.setExtra(k, ""));
+
+        // ✅ Do NOT copy global extras here
         step.setNew(true);
         return step;
     }
+
 
     // --- ID ---
     public String getId() { return id; }
@@ -217,6 +231,70 @@ public class TestStep {
         original.forEach((k, v) -> copy.put(k, v.get()));
         return copy;
     }
+
+    // --- Global Extras ---
+    public StringProperty getGlobalExtraProperty(String columnName) {
+        return globalExtras.computeIfAbsent(columnName, k -> {
+            StringProperty prop = new SimpleStringProperty("");
+            attachDirtyListener(prop, k); // optional: mark dirty when globals change
+            return prop;
+        });
+    }
+
+    public String getGlobalExtra(String columnName) {
+        return getGlobalExtraProperty(columnName).get();
+    }
+
+    public void setGlobalExtra(String columnName, String value) {
+        getGlobalExtraProperty(columnName).set(value);
+    }
+
+    public Map<String, StringProperty> getGlobalExtras() {
+        return Collections.unmodifiableMap(globalExtras);
+    }
+
+    public void setGlobalExtras(Map<String, StringProperty> newGlobals) {
+        globalExtras.clear();
+        if (newGlobals != null) {
+            newGlobals.forEach((key, prop) -> {
+                StringProperty copy = new SimpleStringProperty(prop.get());
+                attachDirtyListener(copy, key);
+                globalExtras.put(key, copy);
+            });
+        }
+    }
+
+    // --- Execution args merge ---
+    public Map<String, String> getAllArgsForExecution() {
+        Map<String, String> merged = new LinkedHashMap<>();
+
+        // Step-specific extras first
+        extras.forEach((k, v) -> merged.put(k, v.get()));
+
+        // Global extras second (do not overwrite step-specific values)
+        globalExtras.forEach((k, v) -> merged.putIfAbsent(k, v.get()));
+
+        return merged;
+    }
+
+    public List<ArgEntry> toArgEntries(int rowIndex) {
+        List<ArgEntry> entries = new ArrayList<>();
+
+        // Step extras
+        extras.forEach((k, v) ->
+                entries.add(new ArgEntry(rowIndex, id, k, v, false)) // false = not header/global
+        );
+
+        // Global extras
+        globalExtras.forEach((k, v) ->
+                entries.add(new ArgEntry(rowIndex, id, k, v, true)) // true = global
+        );
+
+        return entries;
+    }
+
+
+
 
     @Override
     public String toString() {

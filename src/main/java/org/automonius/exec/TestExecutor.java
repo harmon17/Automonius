@@ -6,6 +6,7 @@ import java.lang.reflect.Method;
 import java.util.*;
 import java.io.File;
 import java.net.URL;
+import java.util.logging.Logger;
 
 /**
  * Discovers automation actions annotated with @ActionMeta, grouped by Action.
@@ -17,7 +18,6 @@ public class TestExecutor {
         Map<String, TestCase> grouped = new HashMap<>();
         String path = packageName.replace('.', '/');
 
-        // Locate the directory on the classpath
         URL resource = Thread.currentThread().getContextClassLoader().getResource(path);
         if (resource == null) {
             System.err.println("⚠️ Could not find package: " + packageName);
@@ -35,8 +35,6 @@ public class TestExecutor {
         return grouped;
     }
 
-
-
     private static void scanDirectoryByAction(File dir, String packageName, Map<String, TestCase> grouped)
             throws ClassNotFoundException {
         if (dir == null || !dir.exists()) return;
@@ -52,23 +50,20 @@ public class TestExecutor {
                     if (method.isAnnotationPresent(ActionMeta.class)) {
                         ActionMeta meta = method.getAnnotation(ActionMeta.class);
 
-                        // ✅ include declaring class name
                         TestCase tc = new TestCase(
                                 meta.objectName(),
                                 method.getName(),
                                 meta.description(),
                                 Arrays.asList(meta.inputs()),
-                                clazz.getName()   // new field in TestCase
+                                clazz.getName()
                         );
 
-                        // Keyed by Action name
                         grouped.put(method.getName(), tc);
                     }
                 }
             }
         }
     }
-
 
     // === Get inputs keyed by Action name ===
     public static Map<String, List<String>> getInputsByAction(String packageName) {
@@ -81,14 +76,18 @@ public class TestExecutor {
         return inputsByAction;
     }
 
-    // === Run test by Action ===
+    // === Legacy signature: delegates to merged args ===
     public static Object runTest(TestStep step) {
+        return runTest(step, step.getAllArgsForExecution());
+    }
+
+    // === New overload: explicit merged args ===
+    public static Object runTest(TestStep step, Map<String, String> args) {
         try {
             Map<String, TestCase> actions = discoverActionsByAction("org.automonius.Actions");
             TestCase tc = actions.get(step.getAction());
 
             if (tc != null) {
-                // ✅ Use the actual declaring class name stored in TestCase
                 Class<?> clazz = Class.forName(tc.getDeclaringClass());
 
                 for (Method method : clazz.getDeclaredMethods()) {
@@ -98,21 +97,21 @@ public class TestExecutor {
                         ActionMeta meta = method.getAnnotation(ActionMeta.class);
                         int paramCount = method.getParameterCount();
 
-                        // Collect arguments
-                        List<String> args = new ArrayList<>();
+                        // Collect arguments from provided map
+                        List<String> argValues = new ArrayList<>();
                         String[] inputNames = meta.inputs();
                         for (int i = 0; i < paramCount; i++) {
                             String name = (i < inputNames.length ? inputNames[i] : "arg" + (i + 1));
-                            args.add(step.getExtra(name));
+                            argValues.add(args.getOrDefault(name, ""));
                         }
 
-                        if (args.stream().anyMatch(a -> a == null || a.isBlank())) {
+                        if (argValues.stream().anyMatch(a -> a == null || a.isBlank())) {
                             System.out.println("⚠️ Skipped execution: arguments not yet provided");
                             return null;
                         }
 
-                        if (args.size() != paramCount) {
-                            System.out.println("⚠️ Expected " + paramCount + " args, got " + args.size());
+                        if (argValues.size() != paramCount) {
+                            System.out.println("⚠️ Expected " + paramCount + " args, got " + argValues.size());
                             return null;
                         }
 
@@ -120,7 +119,7 @@ public class TestExecutor {
                         Class<?>[] paramTypes = method.getParameterTypes();
                         Object[] convertedArgs = new Object[paramCount];
                         for (int i = 0; i < paramCount; i++) {
-                            String raw = args.get(i);
+                            String raw = argValues.get(i);
                             Class<?> targetType = paramTypes[i];
                             if (targetType == int.class || targetType == Integer.class) {
                                 convertedArgs[i] = (raw == null || raw.isEmpty()) ? 0 : Integer.parseInt(raw);
@@ -145,7 +144,7 @@ public class TestExecutor {
                         System.out.println("Description: " + tc.getDescription());
                         for (int i = 0; i < paramCount; i++) {
                             String name = (i < inputNames.length ? inputNames[i] : "arg" + (i + 1));
-                            String value = args.get(i) == null ? "" : args.get(i);
+                            String value = argValues.get(i) == null ? "" : argValues.get(i);
                             System.out.println("Args: " + name + "=" + value);
                         }
                         System.out.println("Result: " + result);
@@ -161,6 +160,4 @@ public class TestExecutor {
         }
         return null;
     }
-
-
 }

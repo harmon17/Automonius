@@ -1,0 +1,37 @@
+[
+  {
+    "description": "Base API URL",
+    "fieldName": "arg1",
+    "value": "https://example.com/api"
+  },
+  {
+    "description": "Authentication Token",
+    "fieldName": "arg2",
+    "value": "my-secret-token"
+  },
+  {
+    "description": "Timeout in seconds",
+    "fieldName": "arg3",
+    "value": "30"
+  },
+  {
+    "description": "FileSystemParser",
+    "fieldName": "faith",
+    "value": "C:/Users/ShinYuki17/Downloads/Framework ideas.txt"
+  },
+  {
+    "description": "FileSystemParser",
+    "fieldName": "keyword",
+    "value": "Modular Add-ons (Future-proof ideas)"
+  },
+  {
+    "description": "New Arg",
+    "fieldName": "arg6",
+    "value": "value"
+  },
+  {
+    "description": "New Arg",
+    "fieldName": "newonethisshoulddeleteafterirun",
+    "value": "Run"
+  }
+]

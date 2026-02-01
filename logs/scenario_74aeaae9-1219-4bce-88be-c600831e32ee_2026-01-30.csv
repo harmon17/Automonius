@@ -1,0 +1,34 @@
+phase,timestamp,row,stepId,item,object,action,description,input,args,maxArgs
+Load,2026-01-30T11:48:05.708396300,1,"b35ff6b1-9dd0-40dd-9b22-f5c8a8c63556","<empty>","FileSystem","checkFileContainsKeyword","<empty>","<empty>","[, ]",2
+Load,2026-01-30T11:48:05.708396300,2,"c0576e73-3a5c-488d-92da-c19697401023","<empty>","WebServer","sendRequest","<empty>","<empty>","[]",1
+Load,2026-01-30T11:48:05.708396300,3,"ab3b3f98-0a79-4639-b175-02944a2eb73a","<empty>","WebServer","sendRequest","<empty>","<empty>","[]",1
+Load,2026-01-30T11:48:05.708396300,4,"6080e9b9-43cb-4fa0-8ef7-aecc8ee11442","<empty>","WebServer","sendRequest","<empty>","<empty>","[]",1
+Load,2026-01-30T11:48:05.708396300,5,"f479878c-9034-4b56-bc03-17b2e63bb633","<empty>","WebServer","sendRequest","<empty>","<empty>","[]",1
+Load,2026-01-30T11:48:05.708396300,6,"b6565295-8fc8-42d3-a06f-57edef1862f5","<empty>","WebServer","sendRequest","<empty>","<empty>","[]",1
+Load,2026-01-30T11:48:05.708396300,7,"88330d6c-61dd-48ad-a9a8-89db7f7cd628","<empty>","WebServer","sendRequest","<empty>","<empty>","[]",1
+Load,2026-01-30T11:48:05.708396300,8,"3854fe28-02b0-4d3b-9035-7da57ba4d3de","<empty>","WebServer","sendRequest","<empty>","<empty>","[]",1
+Load,2026-01-30T11:48:05.708396300,9,"28b8f51b-cddd-49f2-9e20-999e8ec80b3c","<empty>","WebServer","sendRequest","<empty>","<empty>","[]",1
+Load,2026-01-30T11:48:05.708396300,10,"15e20493-8d49-496d-866e-85f7d9c65b40","<empty>","WebServer","sendRequest","<empty>","<empty>","[]",1
+Load,2026-01-30T11:48:05.708396300,11,"2c2eea8f-9975-4fbf-9300-2642e9bc757b","<empty>","WebServer","sendRequest","<empty>","<empty>","[]",1
+Commit,2026-01-30T11:48:42.523370600,1,"b35ff6b1-9dd0-40dd-9b22-f5c8a8c63556","<empty>","FileSystem","checkFileContainsKeyword","<empty>","<empty>","[C:/Users/ShinYuki17/Downloads/Framework ideas.txt, Modular Add-ons (Future-proof ideas]",2
+Commit,2026-01-30T11:48:42.523370600,2,"c0576e73-3a5c-488d-92da-c19697401023","<empty>","WebServer","sendRequest","<empty>","<empty>","[]",1
+Commit,2026-01-30T11:48:42.523370600,3,"ab3b3f98-0a79-4639-b175-02944a2eb73a","<empty>","WebServer","sendRequest","<empty>","<empty>","[]",1
+Commit,2026-01-30T11:48:42.523370600,4,"6080e9b9-43cb-4fa0-8ef7-aecc8ee11442","<empty>","WebServer","sendRequest","<empty>","<empty>","[]",1
+Commit,2026-01-30T11:48:42.523370600,5,"f479878c-9034-4b56-bc03-17b2e63bb633","<empty>","WebServer","sendRequest","<empty>","<empty>","[]",1
+Commit,2026-01-30T11:48:42.523370600,6,"b6565295-8fc8-42d3-a06f-57edef1862f5","<empty>","WebServer","sendRequest","<empty>","<empty>","[]",1
+Commit,2026-01-30T11:48:42.523370600,7,"88330d6c-61dd-48ad-a9a8-89db7f7cd628","<empty>","WebServer","sendRequest","<empty>","<empty>","[]",1
+Commit,2026-01-30T11:48:42.523370600,8,"3854fe28-02b0-4d3b-9035-7da57ba4d3de","<empty>","WebServer","sendRequest","<empty>","<empty>","[]",1
+Commit,2026-01-30T11:48:42.523370600,9,"28b8f51b-cddd-49f2-9e20-999e8ec80b3c","<empty>","WebServer","sendRequest","<empty>","<empty>","[]",1
+Commit,2026-01-30T11:48:42.523370600,10,"15e20493-8d49-496d-866e-85f7d9c65b40","<empty>","WebServer","sendRequest","<empty>","<empty>","[]",1
+Commit,2026-01-30T11:48:42.523370600,11,"2c2eea8f-9975-4fbf-9300-2642e9bc757b","<empty>","WebServer","sendRequest","<empty>","<empty>","[]",1
+Load,2026-01-30T23:42:29.216196200,1,"b35ff6b1-9dd0-40dd-9b22-f5c8a8c63556","<empty>","FileSystem","checkFileContainsKeyword","<empty>","<empty>","[, ]",2
+Load,2026-01-30T23:42:29.216196200,2,"c0576e73-3a5c-488d-92da-c19697401023","<empty>","WebServer","sendRequest","<empty>","<empty>","[]",1
+Load,2026-01-30T23:42:29.216196200,3,"ab3b3f98-0a79-4639-b175-02944a2eb73a","<empty>","WebServer","sendRequest","<empty>","<empty>","[]",1
+Load,2026-01-30T23:42:29.216196200,4,"6080e9b9-43cb-4fa0-8ef7-aecc8ee11442","<empty>","WebServer","sendRequest","<empty>","<empty>","[]",1
+Load,2026-01-30T23:42:29.216196200,5,"f479878c-9034-4b56-bc03-17b2e63bb633","<empty>","WebServer","sendRequest","<empty>","<empty>","[]",1
+Load,2026-01-30T23:42:29.216196200,6,"b6565295-8fc8-42d3-a06f-57edef1862f5","<empty>","WebServer","sendRequest","<empty>","<empty>","[]",1
+Load,2026-01-30T23:42:29.216196200,7,"88330d6c-61dd-48ad-a9a8-89db7f7cd628","<empty>","WebServer","sendRequest","<empty>","<empty>","[]",1
+Load,2026-01-30T23:42:29.216196200,8,"3854fe28-02b0-4d3b-9035-7da57ba4d3de","<empty>","WebServer","sendRequest","<empty>","<empty>","[]",1
+Load,2026-01-30T23:42:29.216196200,9,"28b8f51b-cddd-49f2-9e20-999e8ec80b3c","<empty>","WebServer","sendRequest","<empty>","<empty>","[]",1
+Load,2026-01-30T23:42:29.216196200,10,"15e20493-8d49-496d-866e-85f7d9c65b40","<empty>","WebServer","sendRequest","<empty>","<empty>","[]",1
+Load,2026-01-30T23:42:29.216196200,11,"2c2eea8f-9975-4fbf-9300-2642e9bc757b","<empty>","WebServer","sendRequest","<empty>","<empty>","[]",1

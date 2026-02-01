@@ -5,7 +5,6 @@ import java.net.URL;
 import java.time.LocalDateTime;
 import java.util.*;
 
-import com.google.gson.*;
 import javafx.animation.PauseTransition;
 import javafx.application.Platform;
 import javafx.beans.property.ReadOnlyStringWrapper;
@@ -13,30 +12,33 @@ import javafx.beans.property.SimpleStringProperty;
 import javafx.beans.property.StringProperty;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
-import javafx.collections.transformation.FilteredList;
 import javafx.event.ActionEvent;
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
 import javafx.geometry.Side;
-import javafx.scene.Node;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
 import javafx.scene.control.cell.CheckBoxTableCell;
 import javafx.scene.control.cell.PropertyValueFactory;
+import javafx.scene.control.cell.TextFieldTableCell;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.scene.input.*;
-import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
 import javafx.stage.FileChooser;
+import javafx.stage.Modality;
 import javafx.stage.Stage;
 import javafx.util.Duration;
+import javafx.util.StringConverter;
 import javafx.util.converter.DefaultStringConverter;
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.automonius.Annotations.ActionMeta;
-import org.automonius.Model.VariableTreeController;
+import org.automonius.Controller.GlobalArg;
+import org.automonius.Controller.GlobalArgsManager;
+import org.automonius.Controller.Step;
+import org.automonius.Controller.StepRunner;
 import org.automonius.exec.TestCase;
 import org.automonius.exec.TestExecutor;
 
@@ -52,7 +54,6 @@ import java.util.stream.Collectors;
 import javafx.scene.control.cell.TextFieldListCell;
 import javafx.scene.text.Text;
 import javafx.scene.text.TextFlow;
-import javafx.scene.paint.Color;
 import org.kordamp.ikonli.javafx.FontIcon;
 import org.kordamp.ikonli.materialdesign.MaterialDesign;
 import com.google.gson.Gson;
@@ -66,19 +67,21 @@ import static org.automonius.TestStep.toStringMap;
 import org.apache.poi.ss.usermodel.Cell;
 
 import java.util.prefs.Preferences;
+import java.util.stream.Stream;
+
+import org.automonius.Controller.GlobalArgDTO;
+import javafx.beans.binding.Bindings;
+import org.automonius.Controller.ArgEntry;
+
+
+
 
 
 public class MainController {
+
+    // --- Explorer UI ---
     @FXML
     private TreeView<TestNode> treeView;
-    @FXML
-    private TableView<TestStep> tableView;
-    @FXML
-    private TableColumn<TestStep, String> itemColumn;
-    @FXML
-    private TableColumn<TestStep, String> actionColumn;
-    @FXML
-    private TableColumn<TestStep, String> objectColumn;
     @FXML
     private Button newSuiteBtn;
     @FXML
@@ -90,56 +93,84 @@ public class MainController {
     @FXML
     private Label testExplorerLabel;
     @FXML
-    private TableColumn<TestStep, String> descriptionColumn;
-    @FXML
-    private VariableTreeController variableTreeController;
-
-    private final Map<String, ObservableList<TestStep>> scenarioSteps = new HashMap<>();
-
-
-    // Cache of extra column names per scenario
-    private final Map<String, List<String>> scenarioColumns = new HashMap<>();
-    @FXML
-    private final DataFormatter formatter = new DataFormatter();
-    @FXML
-//    private TextArea executionPreviewArea;
-    private static final Logger log = Logger.getLogger(MainController.class.getName());
-    @FXML
     private CheckBox showStepsToggle;
-    private static boolean tableDirty = false;
-    private final Map<String, List<String>> argsByObject = new HashMap<>();
-    private final Map<String, Integer> maxArgsByObject = new HashMap<>();
-    private final ObservableList<TestStep> steps = FXCollections.observableArrayList();
-    private TreeItem<TestNode> draggedItem;
+
+    // --- TableView UI ---
+    @FXML
+    private TableView<TestStep> tableView;
+    @FXML
+    private TableColumn<TestStep, Boolean> selectColumn;
+    @FXML
+    private TableColumn<TestStep, String> itemColumn;
+    @FXML
+    private TableColumn<TestStep, String> objectColumn;
+    @FXML
+    private TableColumn<TestStep, String> actionColumn;
     @FXML
     private TableColumn<TestStep, String> typeColumn;
     @FXML
+    private TableColumn<TestStep, String> descriptionColumn;
+    @FXML
     private TableColumn<TestStep, String> statusColumn;
+    @FXML
+    private TextFlow executionPreviewFlow;
+
+
+    // --- Global Args UI ---
+    @FXML
+    private TableView<GlobalArg> globalArgsTable;
+    @FXML
+    private TableColumn<GlobalArg, String> fieldNameCol;
+    @FXML
+    private TableColumn<GlobalArg, String> variableNameCol;
+    @FXML
+    private TableColumn<GlobalArg, String> valueCol;
+
+    // --- Context Panel UI ---
     @FXML
     private ChoiceBox<String> environmentChoice;
     @FXML
     private ChoiceBox<String> entityChoice;
     @FXML
-    private ListView<String> resolvedVariableList;
-    @FXML
     private TextArea resolvedPayloadArea;
-    private final Map<String, Map<String, String>> contextVariables = new HashMap<>();
-    private final Map<String, String> contextPayloads = new HashMap<>();
     @FXML
     private TextArea lastPayloadArea;
-    private final Map<String, List<String>> argsByAction = new HashMap<>();   // action → inputs
-    private final Map<String, List<String>> actionsByObject = new HashMap<>();
+
+
+
+    // --- Logs UI ---
     @FXML
-    private TextFlow executionPreviewFlow;
+    private TextArea logArea;
+
+    // --- Internal State ---
+    private static final Logger log = Logger.getLogger(MainController.class.getName());
+    private static boolean tableDirty = false;
     private static TestStep copiedStep;
-    // Track the active project file globally
+    private TreeItem<TestNode> draggedItem;
     private File currentProjectFile;
+
+    // --- Data Storage ---
+    private final Map<String, ObservableList<TestStep>> scenarioSteps = new HashMap<>();
+    private final Map<String, List<String>> scenarioColumns = new HashMap<>();
+    private final Map<String, List<String>> argsByObject = new HashMap<>();
+    private final Map<String, Integer> maxArgsByObject = new HashMap<>();
+    private final ObservableList<TestStep> steps = FXCollections.observableArrayList();
+    private final Map<String, Map<String, String>> contextVariables = new HashMap<>();
+    private final Map<String, String> contextPayloads = new HashMap<>();
+    private final Map<String, List<String>> argsByAction = new HashMap<>();
+    private final Map<String, List<String>> actionsByObject = new HashMap<>();
+
     @FXML
-        private TableColumn<TestStep, Boolean> selectColumn;
-    // --- Global args storage ---
-    private final Map<String, StringProperty> globalArgs = new LinkedHashMap<>();
+    private final DataFormatter formatter = new DataFormatter();
 
+    // --- Project Actions ---
+    @FXML
+    private void projectLoad(ActionEvent e) { /* load project file */ }
 
+    @FXML
+    private void projectExportExcel(ActionEvent e) { /* export Excel report */ }
+    @FXML
+    private ListView<ArgEntry> resolvedVariableList;
 
 
 
@@ -155,27 +186,36 @@ public class MainController {
         log.info("MainController.initialize() called — setting up UI");
 
         // --- 1. Discover and prepare data ---
-        discoverActions();       // find available actions
-        initializeDefaults();    // set default object/action/args
+        discoverActions();        // find available actions
+        initializeDefaults();     // set default object/action/args
 
         // --- 2. Build core UI structure ---
-        setupTreeView();         // TreeView root + structure
-        loadTree(treeView);      // load saved project tree
-        setupTableView();        // TableView columns + row factory
-        setupListView();         // ListView for extras/args
+        setupTreeView();          // TreeView root + structure
+        loadTree(treeView);       // load saved project tree
+        setupTableView();         // TableView columns + row factory
+        setupResolvedVariableList(); // ✅ consolidated ListView setup
+
+        // ✅ Populate step args list (for ListView)
+        refreshResolvedVariableList();
 
         // --- 3. Wire up interactions ---
-        setupClipboard();        // copy/paste shortcuts
-        setupTreeContextMenu();  // right-click menu for suites/scenarios
-        setupTableContextMenu(); // right-click menu for steps
+        setupClipboard();         // copy/paste shortcuts
+        setupTreeContextMenu();   // right-click menu for suites/scenarios
+        setupTableContextMenu();  // right-click menu for steps
         enableDragAndDrop(treeView); // drag/drop in tree
 
-        // --- 4. Add listeners/toggles ---
-        setupToggleListener();   // show/hide steps toggle
-        setupSelectionListener();// sync TreeView ↔ TableView ↔ ListView
+        // ✅ Payload args → Ctrl+Space popup in editors
+        enableGlobalArgAutocomplete(resolvedPayloadArea, true); // payload args
+        enableGlobalArgAutocomplete(lastPayloadArea, true);     // payload args
 
-        log.info("MainController.initialize() finished — TreeView root=" +
-                (treeView.getRoot() != null ? treeView.getRoot().getValue().getName() : "null"));
+        // --- 4. Add listeners/toggles ---
+        setupToggleListener();    // show/hide steps toggle
+        setupSelectionListener(); // sync TreeView ↔ TableView ↔ ListView
+
+        // --- 5. Logs ---
+        setupLogArea();           // prepare log area for execution feedback
+
+        log.info("MainController.initialize() finished");
     }
 
 
@@ -302,7 +342,6 @@ public class MainController {
     }
 
 
-
     public void setupInitialProject() {
         Preferences prefs = Preferences.userNodeForPackage(MainController.class);
         String lastPath = prefs.get("lastProjectPath", null);
@@ -351,7 +390,6 @@ public class MainController {
             }
         }
     }
-
 
 
     // --- TreeView context menu ---
@@ -452,69 +490,140 @@ public class MainController {
     // --- Selection listener ---
     private void setupSelectionListener() {
         treeView.getSelectionModel().selectedItemProperty().addListener((obs, oldItem, newItem) -> {
-            // --- Commit edits when leaving a scenario ---
-            if (oldItem != null
-                    && oldItem.getValue().getType() == NodeType.TEST_SCENARIO
-                    && MainController.isTableDirty()) {
-
-                commitActiveEdits(); // flush edits before snapshot
-
-                TestScenario oldScenario = oldItem.getValue().getScenarioRef();
-                if (oldScenario != null) {
-                    // 🔥 Push global args into all steps before snapshot
-                    applyGlobalArgsToSteps(tableView.getItems());
-
-                    ObservableList<TestStep> committedSteps = FXCollections.observableArrayList();
-                    for (TestStep step : tableView.getItems()) {
-                        // ✅ use deepCopy to preserve or assign UUID
-                        committedSteps.add(TestStep.deepCopy(step));
-                    }
-                    oldScenario.getSteps().setAll(committedSteps);
-                    scenarioSteps.put(oldScenario.getId(), committedSteps);
-
-                    String timestamp = java.time.LocalDateTime.now().toString();
-                    logScenarioSnapshot("Commit", oldScenario, committedSteps, timestamp);
-                    writeScenarioSnapshotToFile(oldScenario, committedSteps, "Commit", timestamp);
-                }
+            if (oldItem != null && oldItem.getValue().getType() == NodeType.TEST_SCENARIO && MainController.isTableDirty()) {
+                commitScenario(oldItem.getValue().getScenarioRef());
                 MainController.resetTableDirty();
             }
 
-            // --- Load steps when entering a new scenario ---
             if (newItem != null && newItem.getValue().getType() == NodeType.TEST_SCENARIO) {
-                TestScenario newScenario = newItem.getValue().getScenarioRef();
-                if (newScenario != null) {
-                    ObservableList<TestStep> stepsCopy = FXCollections.observableArrayList(
-                            newScenario.getSteps().stream()
-                                    .map(s -> (s.getId() == null || s.getId().isBlank())
-                                            ? TestStep.deepCopy(s) // ✅ assign UUID if missing
-                                            : s)
-                                    .toList()
-                    );
-                    scenarioSteps.put(newScenario.getId(), stepsCopy);
-                    tableView.setItems(stepsCopy);
-
-                    // ✅ Apply global args immediately after load
-                    applyGlobalArgsToSteps(stepsCopy);
-
-                    // ✅ Force row rendering and selection so UUIDs exist immediately
-                    tableView.refresh();
-                    if (!stepsCopy.isEmpty()) {
-                        tableView.getSelectionModel().selectFirst();
-                    }
-
-                    adjustArgsColumnWidth();
-                    refreshScenarioUI(newScenario);
-
-                    String timestamp = java.time.LocalDateTime.now().toString();
-                    logScenarioSnapshot("Load", newScenario, stepsCopy, timestamp);
-                    writeScenarioSnapshotToFile(newScenario, stepsCopy, "Load", timestamp);
-
-                    // 🔥 Apply toggle state to tree children
-                    applyStepToggle(newItem, newScenario);
-                }
+                loadScenario(newItem.getValue().getScenarioRef(), newItem);
             }
         });
     }
+
+    private void commitScenario(TestScenario scenario) {
+        if (scenario == null) return;
+        commitActiveEdits();
+
+        // ✅ No broadcast of globals here
+
+        ObservableList<TestStep> committedSteps = FXCollections.observableArrayList(
+                tableView.getItems().stream().map(TestStep::deepCopy).toList()
+        );
+        scenario.getSteps().setAll(committedSteps);
+        scenarioSteps.put(scenario.getId(), committedSteps);
+
+        String timestamp = LocalDateTime.now().toString();
+        logScenarioSnapshot("Commit", scenario, committedSteps, timestamp);
+        writeScenarioSnapshotToFile(scenario, committedSteps, "Commit", timestamp);
+
+        log.info("Committed scenario=" + scenario.getId() + " with " + committedSteps.size() + " steps");
+        log.info("Applied global args: " + GlobalArgsManager.getStepArgs().keySet());
+    }
+
+    private void applyGlobalArgToStep(TestStep step, String globalKey, StringProperty globalValue) {
+        if (step.getGlobalExtras() == null) {
+            step.setGlobalExtras(new LinkedHashMap<>());
+        }
+
+        // ✅ Keep the property binding, not just the string
+        step.getGlobalExtras().put(globalKey, globalValue);
+
+        log.info(() -> String.format(
+                "[GLOBAL ASSIGN] row=%d, stepId=%s, action=%s, arg={%s:%s}",
+                tableView.getItems().indexOf(step) + 1,
+                step.getId(),
+                step.getAction(),
+                globalKey,
+                globalValue.get()
+        ));
+    }
+
+
+
+    private void loadScenario(TestScenario scenario, TreeItem<TestNode> treeItem) {
+        if (scenario == null) return;
+        ObservableList<TestStep> stepsCopy = FXCollections.observableArrayList(
+                scenario.getSteps().stream()
+                        .map(s -> (s.getId() == null || s.getId().isBlank()) ? TestStep.deepCopy(s) : s)
+                        .toList()
+        );
+        scenarioSteps.put(scenario.getId(), stepsCopy);
+        tableView.setItems(stepsCopy);
+
+        // ✅ Refresh ListView args for the selected scenario
+        refreshResolvedVariableList();
+
+        // Reload global directory only (do not broadcast to steps)
+        reloadGlobalArgs();
+
+        tableView.refresh();
+        if (!stepsCopy.isEmpty()) tableView.getSelectionModel().selectFirst();
+
+        adjustArgsColumnWidth();
+        refreshScenarioUI(scenario);
+
+        String timestamp = LocalDateTime.now().toString();
+        logScenarioSnapshot("Load", scenario, stepsCopy, timestamp);
+        writeScenarioSnapshotToFile(scenario, stepsCopy, "Load", timestamp);
+
+        log.info("Loaded scenario=" + scenario.getId() + " with " + stepsCopy.size() + " steps");
+        log.info("Global args available: " + GlobalArgsManager.getGlobalArgs().keySet());
+
+        applyStepToggle(treeItem, scenario);
+    }
+
+
+
+
+    // --- Helper to reload persisted global args ---
+    public void reloadGlobalArgs() {
+        if (!GlobalArgsManager.getGlobalArgs().isEmpty()) {
+            log.info("Using in-memory global args (size=" + GlobalArgsManager.getGlobalArgs().size() + ")");
+        } else {
+            File file = new File("globalArgs.json");
+            try {
+                List<GlobalArg> loaded = GlobalArgsManager.loadFromFile(file);
+                log.info("Reloaded " + loaded.size() + " global args from file into directory");
+            } catch (IOException e) {
+                log.warning("Failed to reload global args: " + e.getMessage());
+            }
+        }
+
+        // ✅ No broadcast to steps here
+        // Steps will only get globals when tester selects them via Ctrl+Space
+    }
+
+
+
+
+    // Collect all TestStep objects from the TreeView
+    private List<TestStep> getAllTestSteps() {
+        List<TestStep> steps = new ArrayList<>();
+
+        TreeItem<TestNode> rootItem = treeView.getRoot(); // ✅ use treeView
+        if (rootItem != null) {
+            collectStepsRecursive(rootItem, steps);
+        }
+
+        return steps;
+    }
+
+
+    private void collectStepsRecursive(TreeItem<TestNode> item, List<TestStep> steps) {
+        if (item == null) return;
+
+        TestNode node = item.getValue();
+        if (node != null && node.getStepRef() != null) {
+            steps.add(node.getStepRef());
+        }
+
+        for (TreeItem<TestNode> child : item.getChildren()) {
+            collectStepsRecursive(child, steps);
+        }
+    }
+
+
 
 
     // --- TableView setup (structural only) ---
@@ -541,7 +650,15 @@ public class MainController {
         setupDescriptionColumn();// editable description
         setupStatusColumn();     // PASS/FAIL styling
         setupRowFactory();       // row styling + context menu
+
+        // --- Refresh ListView when step selection changes ---
+        tableView.getSelectionModel().selectedItemProperty().addListener((obs, oldStep, newStep) -> {
+            if (newStep != null) {
+                refreshResolvedVariableList();
+            }
+        });
     }
+
 
 
     // --- Item column → centered numbering ---
@@ -726,77 +843,6 @@ public class MainController {
     }
 
 
-
-    private void setupListView() {
-        resolvedVariableList.setEditable(true);
-        resolvedVariableList.setPlaceholder(new Label("No arguments discovered"));
-
-        resolvedVariableList.setCellFactory(list -> new TextFieldListCell<>(new DefaultStringConverter()) {
-            @Override
-            public void updateItem(String item, boolean empty) {
-                super.updateItem(item, empty);
-                if (empty || item == null) {
-                    setText(null);
-                    setEditable(false);
-                    return;
-                }
-                if (!item.trim().startsWith("--")) {
-                    setText(item);
-                    setStyle("-fx-font-weight: bold; -fx-text-fill: #2a2a2a;");
-                    setEditable(false);
-                } else {
-                    setText(item);
-                    setStyle("");
-                    setEditable(true);
-                }
-            }
-
-            @Override
-            public void startEdit() {
-                super.startEdit();
-                if (getGraphic() instanceof TextField tf) {
-                    tf.textProperty().addListener((obs, oldVal, newVal) -> {
-                        if (getItem() != null && getItem().startsWith("--")) {
-                            String key = getItem().substring(2);
-
-                            // 🔥 Update globalArgs
-                            StringProperty prop = globalArgs.computeIfAbsent(key, k -> new SimpleStringProperty(""));
-                            prop.set(newVal);
-
-                            // ✅ Ensure a TableView row is selected so UUID assignment runs
-                            TestStep selectedStep = tableView.getSelectionModel().getSelectedItem();
-                            if (selectedStep == null && !tableView.getItems().isEmpty()) {
-                                tableView.getSelectionModel().selectFirst();
-                                selectedStep = tableView.getSelectionModel().getSelectedItem();
-                            }
-
-                            // ✅ Guarantee an ID
-                            String stepId = (selectedStep != null && selectedStep.getId() != null && !selectedStep.getId().isBlank())
-                                    ? selectedStep.getId()
-                                    : "global";
-
-                            // Log and preview updates
-                            log.info(() -> "Edited global arg=" + key + ", newValue=" + newVal);
-                            updateExecutionPreview("Arg updated → step=" + stepId + ", var=" + key + ", value=" + newVal);
-
-                            // 🔥 Show full globalArgs state
-                            String dump = globalArgs.entrySet().stream()
-                                    .map(e -> e.getKey() + "=" + e.getValue().get())
-                                    .collect(Collectors.joining(", "));
-                            updateExecutionPreview("Global args state → [" + dump + "]");
-                            log.info(() -> "Global args snapshot: [" + dump + "]");
-
-                            // 🎨 Visual feedback
-                            setStyle("-fx-background-color: #d6f5ff; -fx-font-weight: bold;");
-                            PauseTransition pause = new PauseTransition(Duration.seconds(1.5));
-                            pause.setOnFinished(e -> setStyle(""));
-                            pause.play();
-                        }
-                    });
-                }
-            }
-        });
-    }
 
 
     @FXML
@@ -1016,7 +1062,7 @@ public class MainController {
                     stepRow.createCell(colIndex++).setCellValue(step.getDescription());
                     stepRow.createCell(colIndex++).setCellValue(step.getInput());
 
-                    // Extras
+                    // Step-specific extras only
                     for (String colName : step.getExtras().keySet()) {
                         String value = step.getExtra(colName);
                         stepRow.createCell(colIndex++).setCellValue(value);
@@ -1028,6 +1074,22 @@ public class MainController {
                         stepRow.getCell(i).setCellStyle(stepStyle);
                     }
                 }
+
+                // ✅ Add a separate section for global extras (once per scenario)
+                if (!scenario.getSteps().isEmpty()) {
+                    Row globalsHeader = sheet.createRow(rowIndex.getAndIncrement());
+                    Cell globalsCell = globalsHeader.createCell(0);
+                    globalsCell.setCellValue("Global Extras");
+                    globalsCell.setCellStyle(headerStyle);
+
+                    // Collect globals from the first step (or scenario-level container if you have one)
+                    Map<String, StringProperty> globals = scenario.getSteps().get(0).getGlobalExtras();
+                    for (Map.Entry<String, StringProperty> entry : globals.entrySet()) {
+                        Row globalRow = sheet.createRow(rowIndex.getAndIncrement());
+                        globalRow.createCell(0).setCellValue(entry.getKey());
+                        globalRow.createCell(1).setCellValue(entry.getValue().get());
+                    }
+                }
             }
 
             // Recurse into child suites if any
@@ -1036,6 +1098,7 @@ public class MainController {
             }
         }
     }
+
 
 
     private void saveScenariosRecursive(Sheet sheet, TreeItem<TestNode> node, AtomicInteger rowIndex) {
@@ -1109,10 +1172,9 @@ public class MainController {
         );
 
         if (!checkedSteps.isEmpty()) {
-            applyGlobalArgsToSteps(checkedSteps); // 🔥 propagate global args
             updateExecutionPreview("▶ Running " + checkedSteps.size() + " selected steps...");
             for (TestStep step : checkedSteps) {
-                runSingleStep(step);
+                runSingleStep(step); // step already has any globals explicitly assigned
             }
             return;
         }
@@ -1128,45 +1190,8 @@ public class MainController {
             return;
         }
 
-        // ✅ Wrap single step into an ObservableList
-        applyGlobalArgsToSteps(FXCollections.observableArrayList(selectedStep));
+        // ✅ Run single step directly
         runSingleStep(selectedStep);
-    }
-
-
-
-    private void applyGlobalArgsToSteps(List<TestStep> steps) {
-        for (TestStep step : steps) {
-            // Get the expected args for this action
-            List<String> args = argsByAction.getOrDefault(step.getAction(), List.of());
-
-            // Start fresh extras map
-            Map<String, StringProperty> newExtras = new LinkedHashMap<>();
-
-            for (String arg : args) {
-                StringProperty value;
-
-                // Priority 1: keep existing step value if present
-                if (step.getExtras() != null && step.getExtras().containsKey(arg)) {
-                    value = new SimpleStringProperty(step.getExtras().get(arg).get());
-                }
-                // Priority 2: apply global arg if available
-                else if (globalArgs.containsKey(arg)) {
-                    value = new SimpleStringProperty(globalArgs.get(arg).get());
-                }
-                // Priority 3: default empty
-                else {
-                    value = new SimpleStringProperty("");
-                }
-
-                newExtras.put(arg, value);
-            }
-
-            step.setExtras(newExtras);
-            step.setMaxArgs(args.size());
-        }
-
-        log.info("Applied global args to " + steps.size() + " steps: ");
     }
 
 
@@ -1175,21 +1200,23 @@ public class MainController {
         if (step == null) return;
         step.setNew(false);
 
-        // ✅ Apply global args to all steps before execution
-        applyGlobalArgsToSteps(tableView.getItems());
+        // ✅ No broadcast of globals here
+        // Steps already have any globals explicitly assigned
 
-        // ✅ Pre-execution extras dump
-        String extrasDump = step.getExtras().entrySet().stream()
-                .map(e -> e.getKey() + "=" + e.getValue().get())
+        // ✅ Pre-execution merged dump
+        Map<String, String> allArgs = step.getAllArgsForExecution();
+        String argsDump = allArgs.entrySet().stream()
+                .map(e -> e.getKey() + "=" + e.getValue())
                 .collect(Collectors.joining(", "));
         log.info(() -> "Running step " + step.getId() + " (" + step.getAction() + ") "
-                + "with extras: [" + extrasDump + "]");
+                + "with args: [" + argsDump + "]");
 
         String[] inputs = getInputsForAction(step.getAction());
         updateExecutionPreview("Annotation input names: " + Arrays.toString(inputs));
-        updateExecutionPreview("Extras map: " + step.getExtras());
+        updateExecutionPreview("Merged args map: " + allArgs);
 
-        Object resultObj = TestExecutor.runTest(step);
+        // ✅ Pass merged args into executor
+        Object resultObj = TestExecutor.runTest(step, allArgs);
 
         if (resultObj instanceof Boolean) {
             step.setStatus((Boolean) resultObj ? "PASS" : "FAIL");
@@ -1201,11 +1228,7 @@ public class MainController {
 
         Map<String, Object> logData = new LinkedHashMap<>();
         logData.put("result", resultObj);
-        step.getExtras().forEach((k, v) -> {
-            if (v != null) {
-                logData.put(k, v.get() == null ? "" : v.get());
-            }
-        });
+        allArgs.forEach(logData::put);
 
         String message = "Ran step: " + step.getAction() +
                 " on " + step.getObject() +
@@ -1215,6 +1238,25 @@ public class MainController {
         logStepChange("Run", step, logData);
     }
 
+
+    // --- Assign a single global arg to the active step ---
+    private void applyGlobalArgToStep(TestStep step, String globalKey, String globalValue) {
+        if (step.getGlobalExtras() == null) {
+            step.setGlobalExtras(new LinkedHashMap<>());
+        }
+
+        // Only assign the chosen global
+        step.getGlobalExtras().put(globalKey, new SimpleStringProperty(globalValue));
+
+        log.info(() -> String.format(
+                "[GLOBAL ASSIGN] row=%d, stepId=%s, action=%s, arg={%s:%s}",
+                tableView.getItems().indexOf(step) + 1,
+                step.getId(),
+                step.getAction(),
+                globalKey,
+                globalValue
+        ));
+    }
 
 
 
@@ -1272,8 +1314,6 @@ public class MainController {
             }
         });
     }
-
-
 
 
     private void handleRenameColumn(TableColumn<TestStep, String> column, TreeItem<TestNode> scenario) {
@@ -1431,7 +1471,7 @@ public class MainController {
             );
             copy.setDescription(edited.getDescription());
 
-            // Always rebuild extras from global argsByAction
+            // --- Rebuild step-specific extras from argsByAction ---
             List<String> args = argsByAction.getOrDefault(copy.getAction(), List.of());
             Map<String, StringProperty> extras = args.stream()
                     .collect(Collectors.toMap(
@@ -1446,6 +1486,15 @@ public class MainController {
                     ));
             copy.setExtras(extras);
             copy.setMaxArgs(args.size());
+
+            // --- ✅ Preserve global extras separately ---
+            if (edited.getGlobalExtras() != null) {
+                Map<String, StringProperty> globalsCopy = new LinkedHashMap<>();
+                edited.getGlobalExtras().forEach((k, v) ->
+                        globalsCopy.put(k, new SimpleStringProperty(v.get()))
+                );
+                copy.setGlobalExtras(globalsCopy);
+            }
 
             scenario.getSteps().add(copy);
         }
@@ -2045,9 +2094,7 @@ public class MainController {
     }
 
 
-
     // Helper to copy extras
-    // Helper to copy extras safely
     private static Map<String, SimpleStringProperty> copyExtras(Map<String, SimpleStringProperty> original) {
         return original.entrySet().stream()
                 .collect(Collectors.toMap(
@@ -2063,7 +2110,7 @@ public class MainController {
         if (original == null) return null;
 
         // Use the explicit constructor with ID to preserve the original ID if needed
-        return new TestStep(
+        TestStep copy = new TestStep(
                 original.getId(),                  // preserve ID
                 original.getItem(),
                 original.getAction(),
@@ -2076,7 +2123,19 @@ public class MainController {
                 original.getMaxArgs(),
                 original.isNew()
         );
+
+        // ✅ Copy global extras separately
+        if (original.getGlobalExtras() != null) {
+            Map<String, StringProperty> globalsCopy = new LinkedHashMap<>();
+            original.getGlobalExtras().forEach((k, v) ->
+                    globalsCopy.put(k, new SimpleStringProperty(v.get()))
+            );
+            copy.setGlobalExtras(globalsCopy);
+        }
+
+        return copy;
     }
+
 
 
     @FXML
@@ -2216,7 +2275,7 @@ public class MainController {
 
             if (hasContent) {
                 log.info(() -> String.format(
-                        "row=%d, stepId=%s, item=%s, object=%s, action=%s, description=%s, input=%s, args=%s, maxArgs=%d",
+                        "row=%d, stepId=%s, item=%s, object=%s, action=%s, description=%s, input=%s, maxArgs=%d",
                         rowIndex,
                         step.getId(),
                         safeString(step.getItem()),
@@ -2224,9 +2283,21 @@ public class MainController {
                         safeString(step.getAction()),
                         safeString(step.getDescription()),
                         safeString(step.getInput()),
-                        step.getArgs(),
                         step.getMaxArgs()
                 ));
+
+                // --- ✅ Unified merged args (step + globals) ---
+                Map<String, String> allArgs = step.getAllArgsForExecution();
+                if (!allArgs.isEmpty()) {
+                    for (Map.Entry<String, String> entry : allArgs.entrySet()) {
+                        String argName = entry.getKey();
+                        String argValue = entry.getValue() != null ? entry.getValue() : "";
+                        log.info(() -> String.format(
+                                "   ↳ arg=%s, value=%s (row=%d, stepId=%s)",
+                                argName, argValue, rowIndex, step.getId()
+                        ));
+                    }
+                }
             } else {
                 log.fine(() -> String.format("row=%d skipped (empty step)", rowIndex));
             }
@@ -2234,6 +2305,8 @@ public class MainController {
 
         log.info(() -> String.format("=== End %s snapshot ===", phase));
     }
+
+
 
     private void adjustArgsColumnWidth() {
         for (TableColumn<TestStep, ?> col : tableView.getColumns()) {
@@ -2309,20 +2382,26 @@ public class MainController {
             // Pause editing while we stabilize
             tableView.setEditable(false);
 
-            // Deep copy current steps into scenario
+            // Deep copy current steps into scenario (preserves globals now)
             ObservableList<TestStep> committedSteps = FXCollections.observableArrayList();
             for (TestStep step : tableView.getItems()) {
-                committedSteps.add(new TestStep(step));
+                committedSteps.add(new TestStep(step)); // ✅ deep copy includes globalExtras
             }
             scenario.getSteps().setAll(committedSteps);
             scenarioSteps.put(scenario.getId(), committedSteps);
 
-            // Snapshot current dynamic headers
+            // Snapshot current dynamic headers (step extras only)
             List<String> argNamesForScenario = tableView.getColumns().stream()
                     .filter(c -> "Dynamic".equals(c.getUserData()))
                     .map(TableColumn::getText)
                     .toList();
             scenarioColumns.put(scenario.getId(), argNamesForScenario);
+
+            // ✅ Optional: snapshot global arg names separately
+            if (!committedSteps.isEmpty()) {
+                List<String> globalArgNames = new ArrayList<>(committedSteps.get(0).getGlobalExtras().keySet());
+                scenarioColumns.put(scenario.getId() + "_globals", globalArgNames);
+            }
 
             // Feedback to tester
             updateExecutionPreview("Autosave triggered for scenario: " + scenario.getName());
@@ -2332,6 +2411,7 @@ public class MainController {
             tableView.refresh();
         }
     }
+
 
     private String getCurrentContextKey() {
         String env = environmentChoice.getValue();
@@ -2394,10 +2474,6 @@ public class MainController {
     }
 
 
-
-
-
-
     private void runScenario(TestScenario scenario) {
         updateExecutionPreview("▶ Running scenario '" + scenario.getName() + "'...");
 
@@ -2412,17 +2488,19 @@ public class MainController {
 
     private void runStepWithLogging(TestStep step, int rowIndex) {
         try {
-            Object resultObj = TestExecutor.runTest(step);
+            // ✅ Use merged args for execution
+            Map<String, String> allArgs = step.getAllArgsForExecution();
+            Object resultObj = TestExecutor.runTest(step, allArgs); // overload runTest to accept args
 
             updateExecutionPreview("Row " + rowIndex + ": " + step.getAction() +
                     " on " + step.getObject() +
                     " → Result: " + (resultObj != null ? resultObj.toString() : "<null>"));
 
-            // 🔄 Sync updated extras back into context variables
-            step.getExtras().forEach((key, prop) -> {
+            // 🔄 Sync merged args back into context variables
+            allArgs.forEach((key, value) -> {
                 contextVariables
                         .computeIfAbsent(getCurrentContextKey(), k -> new LinkedHashMap<>())
-                        .put(key, prop.get());
+                        .put(key, value);
             });
 
         } catch (Exception ex) {
@@ -2432,6 +2510,7 @@ public class MainController {
             log.log(Level.SEVERE, "Error running step " + rowIndex, ex);
         }
     }
+
 
 
     @FXML
@@ -2502,7 +2581,7 @@ public class MainController {
     private void syncScenarioToContext(TestScenario scenario) {
         String contextKey = getCurrentContextKey();
 
-        List<String> groupedItems = new ArrayList<>();
+        List<ArgEntry> argEntries = new ArrayList<>();
         int rowIndex = 1;
 
         for (TestStep step : tableView.getItems()) {
@@ -2512,30 +2591,62 @@ public class MainController {
                 continue;
             }
 
-            groupedItems.add("Row " + rowIndex + ": " + action);
+            // --- Ensure extras/globalExtras maps exist ---
+            Map<String, StringProperty> extras = step.getExtras();
+            if (extras == null || !(extras instanceof LinkedHashMap)) {
+                extras = new LinkedHashMap<>();
+                step.setExtras(extras);
+            }
 
+            Map<String, StringProperty> globals = step.getGlobalExtras();
+            if (globals == null || !(globals instanceof LinkedHashMap)) {
+                globals = new LinkedHashMap<>();
+                step.setGlobalExtras(globals);
+            }
+
+            // --- Merge expected args ---
             List<String> args = argsByAction.getOrDefault(action, List.of());
-            Map<String, StringProperty> existingExtras = step.getExtras() != null ? step.getExtras() : Map.of();
-            Map<String, StringProperty> extras = args.stream()
-                    .collect(Collectors.toMap(
-                            arg -> arg,
-                            arg -> existingExtras.containsKey(arg)
-                                    ? existingExtras.get(arg)
-                                    : new SimpleStringProperty(""),
-                            (a, b) -> a,
-                            LinkedHashMap::new
-                    ));
-            step.setExtras(extras);
-            step.setMaxArgs(args.size());
+            for (String arg : args) {
+                if (GlobalArgsManager.getGlobalArgs().containsKey(arg)) {
+                    // ✅ Link to manager property for globals
+                    StringProperty managerProp = GlobalArgsManager.getGlobalArgs().get(arg);
+                    globals.put(arg, managerProp);
+                } else {
+                    // ✅ Reuse or create local property
+                    extras.computeIfAbsent(arg, k -> new SimpleStringProperty(""));
+                }
+            }
+            step.setMaxArgs(extras.size() + globals.size());
 
-            // ✅ Only once
-            extras.forEach((key, prop) -> groupedItems.add("--" + key + "=" + prop.get()));
+            // --- Add grouping header for this step/action ---
+            argEntries.add(new ArgEntry(
+                    rowIndex,
+                    step.getId(),
+                    "Row " + rowIndex + ": " + action,
+                    new SimpleStringProperty("") // header only
+            ));
+
+            // --- Add all extras as editable entries ---
+            for (Map.Entry<String, StringProperty> entry : extras.entrySet()) {
+                argEntries.add(new ArgEntry(rowIndex, step.getId(),
+                        entry.getKey(), entry.getValue())); // reuse property
+            }
+
+            // --- Add all globals as editable entries ---
+            for (Map.Entry<String, StringProperty> global : globals.entrySet()) {
+                argEntries.add(new ArgEntry(rowIndex, step.getId(),
+                        global.getKey(), global.getValue(), true)); // reuse manager property
+            }
 
             rowIndex++;
         }
 
+        // --- Build context variables map (reuse property values) ---
         Map<String, String> vars = tableView.getItems().stream()
-                .flatMap(s -> s.getExtras().entrySet().stream())
+                .flatMap(s -> Stream.concat(
+                        s.getExtras().entrySet().stream(),
+                        s.getGlobalExtras() != null ? s.getGlobalExtras().entrySet().stream() : Stream.empty()
+                ))
                 .collect(Collectors.toMap(
                         Map.Entry::getKey,
                         e -> e.getValue().get(),
@@ -2544,7 +2655,8 @@ public class MainController {
                 ));
         contextVariables.put(contextKey, vars);
 
-        resolvedVariableList.setItems(FXCollections.observableArrayList(groupedItems));
+        // --- Populate ListView with ArgEntry objects ---
+        resolvedVariableList.setItems(FXCollections.observableArrayList(argEntries));
         resolvedVariableList.setPlaceholder(new Label("No arguments discovered"));
 
         vars.forEach((name, value) -> log.info(() -> String.format(
@@ -2552,73 +2664,100 @@ public class MainController {
                 scenario.getId(), name, value
         )));
 
-        resolvedVariableList.setCellFactory(list -> new TextFieldListCell<>(new DefaultStringConverter()) {
+        // --- Cell factory: headers vs editable args ---
+        resolvedVariableList.setCellFactory(list -> new TextFieldListCell<>(new StringConverter<ArgEntry>() {
             @Override
-            public void updateItem(String item, boolean empty) {
-                super.updateItem(item, empty);
-                if (empty || item == null) {
-                    setText(null);
-                    setEditable(false);
-                    return;
-                }
-                if (!item.trim().startsWith("--")) {
-                    setText(item);
-                    setStyle("-fx-font-weight: bold; -fx-text-fill: #2a2a2a;");
-                    setEditable(false);
-                } else {
-                    setText(item);
-                    setStyle("");
-                    setEditable(true);
-                }
+            public String toString(ArgEntry entry) {
+                if (entry == null) return "";
+                if (entry.isHeader()) return entry.getName();
+                return entry.getName() + "=" + entry.valueProperty().get();
             }
 
             @Override
+            public ArgEntry fromString(String string) {
+                ArgEntry entry = resolvedVariableList.getSelectionModel().getSelectedItem();
+                if (entry != null && !entry.isHeader()) {
+                    String[] parts = string.split("=", 2);
+                    if (parts.length == 2) {
+                        entry.valueProperty().set(parts[1]);
+                        logExecutionEvent("ARG", String.format(
+                                "row=%d, stepId=%s, arg=%s, value=%s",
+                                entry.getRowIndex(),
+                                entry.getStepId(),
+                                entry.getName(),
+                                parts[1]
+                        ));
+                    }
+                }
+                return entry;
+            }
+        }) {
+            @Override
             public void startEdit() {
                 super.startEdit();
-                if (getGraphic() instanceof TextField tf) {
-                    tf.focusedProperty().addListener((obs, wasFocused, isNowFocused) -> {
-                        if (!isNowFocused) {
-                            commitEdit(tf.getText());
+                TextField textField = (TextField) getGraphic();
+                ArgEntry activeEntry = getItem();
+
+                if (textField != null && activeEntry != null && !activeEntry.isHeader()) {
+                    textField.addEventFilter(KeyEvent.KEY_PRESSED, event -> {
+                        if (event.isControlDown() && event.getCode() == KeyCode.SPACE) {
+                            // ✅ Show global arg suggestions for this step
+                            TestStep step = findStepById(activeEntry.getStepId());
+                            showGlobalArgSuggestions(textField, step);
+                            event.consume();
                         }
                     });
                 }
             }
         });
-
-        resolvedVariableList.setOnEditCommit(event -> {
-            String newValue = event.getNewValue();
-            if (!newValue.trim().startsWith("--")) return;
-
-            String[] parts = newValue.trim().substring(2).split("=", 2);
-            if (parts.length == 2) {
-                String varName = parts[0];
-                String varValue = parts[1];
-
-                Map<String, String> ctxVars = contextVariables.get(contextKey);
-                if (ctxVars != null) ctxVars.put(varName, varValue);
-
-                TestStep selectedStep = tableView.getSelectionModel().getSelectedItem();
-                if (selectedStep != null) {
-                    selectedStep.getExtraProperty(varName).set(varValue);
-                }
-
-                resolvedVariableList.getItems().set(event.getIndex(), newValue);
-
-                logExecutionEvent("ARG", "step=" +
-                        (selectedStep != null ? selectedStep.getId() : "unknown") +
-                        ", var=" + varName + ", value=" + varValue);
-
-                StringBuilder payloadBuilder = new StringBuilder();
-                if (selectedStep != null) {
-                    selectedStep.getExtras().forEach((k, v) -> {
-                        payloadBuilder.append("--").append(k).append("=")
-                                .append(v.get()).append("\n");
-                    });
-                }
-                resolvedPayloadArea.setText(payloadBuilder.toString().trim());
-            }
-        });
     }
+
+
+    private void showGlobalArgSuggestions(TextField field, TestStep step) {
+        ContextMenu menu = new ContextMenu();
+
+        GlobalArgsManager.getGlobalArgs().forEach((key, value) -> {
+            MenuItem item = new MenuItem(key + " = " + value);
+            item.setOnAction(e -> {
+                handleGlobalArgSelection(step, key); // ✅ attach only chosen global
+                field.setText("${" + key + "}");     // show placeholder in UI
+            });
+            menu.getItems().add(item);
+        });
+
+        menu.show(field, Side.BOTTOM, 0, 0);
+    }
+
+    private void handleGlobalArgSelection(TestStep activeStep, String chosenKey) {
+        StringProperty prop = GlobalArgsManager.getGlobalArgs().get(chosenKey);
+        if (prop != null) {
+            // ✅ Attach property itself
+            applyGlobalArgToStep(activeStep, chosenKey, prop);
+
+            // ✅ Bind the ArgEntry to the global property
+            ArgEntry entry = findArgEntryForStep(activeStep, chosenKey);
+            if (entry != null) {
+                entry.valueProperty().bindBidirectional(prop);
+            }
+
+            tableView.refresh();
+        }
+    }
+
+    private ArgEntry findArgEntryForStep(TestStep step, String argName) {
+        if (step == null || argName == null) return null;
+
+        for (ArgEntry entry : resolvedVariableList.getItems()) {
+            if (entry.getStepId().equals(step.getId())
+                    && entry.getName().equals(argName)) {
+                return entry;
+            }
+        }
+        return null;
+    }
+
+
+
 
 
 
@@ -2644,7 +2783,6 @@ public class MainController {
         safeguardScenario(scenario);
         syncScenarioToContext(scenario);
     }
-
 
 
     private TableCell<TestStep, String> buildObjectComboCell() {
@@ -2758,6 +2896,7 @@ public class MainController {
             case "ARG":
                 logLine.setFill(Color.DODGERBLUE);
                 logLine.setStyle("-fx-font-weight: bold;");
+                // ✨ Standardize ARG logs to show row + stepId + arg/value
                 logLine.setText("✎ Arg updated → " + message + "\n");
                 break;
             default:
@@ -2767,6 +2906,7 @@ public class MainController {
 
         executionPreviewFlow.getChildren().add(logLine);
     }
+
 
     private void commitActiveEdits() {
         // End any active TableView edit
@@ -2779,8 +2919,6 @@ public class MainController {
             resolvedVariableList.edit(-1);
         }
     }
-
-
 
 
     // --- Suite lookup by ID ---
@@ -3200,7 +3338,6 @@ public class MainController {
     }
 
 
-
     private TreeItem<TestNode> fromDTO(NodeDTO dto) {
         // 🔥 Ensure TestNode is created with the persisted name
         TestNode node = new TestNode(dto.getId(), dto.getName(), dto.getType());
@@ -3279,7 +3416,6 @@ public class MainController {
 
         return item;
     }
-
 
 
     // --- Save helper ---
@@ -3657,6 +3793,386 @@ public class MainController {
         selectColumn.setGraphic(masterCheckBox); // place checkbox in header
         selectColumn.setPrefWidth(40);           // keep it compact
     }
+
+
+
+    // --- 7. Logs ---
+    private void setupLogArea() {
+        // prepare log area for execution feedback (global vs literal resolution, step results)
+        logArea.setText("Logs initialized...\n");
+    }
+
+    @FXML
+    private void globalArgsOpenWindow(ActionEvent event) {
+        try {
+            FXMLLoader loader = new FXMLLoader(getClass().getResource("/fxml/GlobalArgsWindow.fxml"));
+            Parent root = loader.load();
+            Stage stage = new Stage();
+            stage.setTitle("Global Arguments Manager");
+            stage.setScene(new Scene(root));
+            stage.initModality(Modality.APPLICATION_MODAL);
+            stage.show();
+        } catch (IOException e) {
+            log.log(Level.SEVERE, "Failed to open Global Args window", e);
+            logArea.appendText("⚠ Could not open Global Args window.\n");
+        }
+    }
+
+
+    @FXML
+    private void scenarioBuilderOpenWindow(ActionEvent event) {
+        try {
+            FXMLLoader loader = new FXMLLoader(getClass().getResource("/fxml/ScenarioBuilderWindow.fxml"));
+            Parent root = loader.load();
+            Stage stage = new Stage();
+            stage.setTitle("Scenario Builder");
+            stage.setScene(new Scene(root));
+            stage.initModality(Modality.APPLICATION_MODAL);
+            stage.show();
+        } catch (IOException e) {
+            log.log(Level.SEVERE, "Failed to open Scenario Builder window", e);
+            logArea.appendText("⚠ Could not open Scenario Builder window.\n");
+        }
+    }
+
+
+    private void setupResolvedVariableList() {
+        resolvedVariableList.setEditable(true);
+        resolvedVariableList.setPlaceholder(new Label("No arguments discovered"));
+
+        resolvedVariableList.setCellFactory(list -> new ListCell<ArgEntry>() {
+            private final TextField textField = new TextField();
+
+            @Override
+            protected void updateItem(ArgEntry entry, boolean empty) {
+                super.updateItem(entry, empty);
+
+                if (empty || entry == null) {
+                    // clear bindings when cell is empty
+                    textField.textProperty().unbind();
+                    setGraphic(null);
+                    setText(null);
+                    return;
+                }
+
+                if (entry.isHeader()) {
+                    setText(entry.getName());
+                    setGraphic(null);
+                    setStyle("-fx-background-color: #f0f0f0; -fx-font-weight: bold; -fx-text-fill: #1a73e8;");
+                } else {
+                    // clear any old binding
+                    textField.textProperty().unbind();
+
+                    // bind to current entry
+                    textField.textProperty().bindBidirectional(entry.valueProperty());
+
+                    // visual cue for globals
+                    if (entry.isGlobal()) {
+                        textField.setStyle("-fx-text-fill: blue; -fx-font-weight: bold;");
+                        textField.setPromptText("[GLOBAL] " + entry.getName());
+                    } else {
+                        textField.setStyle("");
+                        textField.setPromptText(entry.getName());
+                    }
+
+                    setGraphic(textField);
+                    setText(null);
+                }
+            }
+        });
+
+        // --- Double‑click → start editing ---
+        resolvedVariableList.setOnMouseClicked(event -> {
+            if (event.getClickCount() == 2) {
+                int index = resolvedVariableList.getSelectionModel().getSelectedIndex();
+                if (index >= 0) {
+                    resolvedVariableList.edit(index);
+                }
+            }
+        });
+
+        // --- Ctrl+Space → show global args popup ---
+        resolvedVariableList.addEventFilter(KeyEvent.KEY_PRESSED, event -> {
+            if (event.isControlDown() && event.getCode() == KeyCode.SPACE) {
+                event.consume();
+
+                ContextMenu suggestions = new ContextMenu();
+                GlobalArgsManager.getStepArgsSnapshot().forEach(arg -> {
+                    String label = "{" + arg.getFieldName() + ":" + arg.getValue() + "}";
+                    MenuItem item = new MenuItem(label);
+
+                    item.setOnAction(e -> {
+                        TestStep step = tableView.getSelectionModel().getSelectedItem();
+                        ArgEntry entry = resolvedVariableList.getSelectionModel().getSelectedItem();
+
+                        if (step != null && entry != null && !entry.isHeader()) {
+                            applyGlobalArgValueToStep(step, entry.getName(), arg.getValue());
+                            refreshResolvedVariableList();
+                            suggestions.hide();
+
+                            logExecutionEvent("ARG", String.format(
+                                    "row=%d, stepId=%s, arg=%s, value=%s (applied global %s)",
+                                    entry.getRowIndex(),
+                                    entry.getStepId(),
+                                    entry.getName(),
+                                    arg.getValue(),
+                                    label
+                            ));
+                        }
+                    });
+
+                    suggestions.getItems().add(item);
+                });
+
+                suggestions.show(resolvedVariableList, Side.BOTTOM, 0, 0);
+            }
+        });
+    }
+
+
+
+
+
+    private void enablePayloadArgAutocomplete(TextArea targetArea) {
+        targetArea.addEventFilter(KeyEvent.KEY_PRESSED, event -> {
+            if (event.isControlDown() && event.getCode() == KeyCode.SPACE) {
+                event.consume();
+
+                ContextMenu suggestions = new ContextMenu();
+                GlobalArgsManager.getPayloadArgsSnapshot().forEach(arg -> {
+                    String formatted = "{" + arg.getFieldName() + ":" + arg.getValue() + "}";
+                    MenuItem item = new MenuItem(formatted);
+                    item.setOnAction(e -> {
+                        int caretPos = targetArea.getCaretPosition();
+                        targetArea.insertText(caretPos, formatted);
+                    });
+                    suggestions.getItems().add(item);
+                });
+
+                suggestions.show(targetArea, Side.BOTTOM, 0, 0);
+            }
+        });
+    }
+
+
+    private void enableGlobalArgAutocomplete(TextArea targetArea, boolean payloadMode) {
+        targetArea.addEventFilter(KeyEvent.KEY_PRESSED, event -> {
+            if (event.isControlDown() && event.getCode() == KeyCode.SPACE) {
+                event.consume();
+
+                ContextMenu suggestions = new ContextMenu();
+                List<GlobalArg> source = payloadMode
+                        ? GlobalArgsManager.getPayloadArgsSnapshot()
+                        : GlobalArgsManager.getStepArgsSnapshot();
+
+                source.forEach(arg -> {
+                    String formatted = "{" + arg.getFieldName() + ":" + arg.getValue() + "}";
+                    MenuItem item = new MenuItem(formatted);
+                    item.setOnAction(e -> {
+                        int caretPos = targetArea.getCaretPosition();
+                        targetArea.insertText(caretPos, formatted);
+                    });
+                    suggestions.getItems().add(item);
+                });
+
+                suggestions.show(targetArea, Side.BOTTOM, 0, 0);
+            }
+        });
+    }
+
+    // Apply only the value part of {fieldName:value} to the global extras
+    // Apply global arg to a step by reusing the manager's property
+    private void applyGlobalArgValueToStep(TestStep step, String argName, String value) {
+        if (step == null || argName == null) return;
+
+        // Always reuse the manager's property
+        StringProperty managerProp = GlobalArgsManager.getGlobalArgs().get(argName);
+        if (managerProp == null) {
+            // If manager doesn't have it yet, create and register
+            managerProp = new SimpleStringProperty(value);
+            GlobalArgsManager.getGlobalArgs().put(argName, managerProp);
+        } else {
+            // Update manager property value
+            managerProp.set(value);
+        }
+
+        // Link step's globalExtras directly to manager property
+        Map<String, StringProperty> globals = step.getGlobalExtras();
+        if (globals == null || !(globals instanceof LinkedHashMap)) {
+            globals = new LinkedHashMap<>();
+            step.setGlobalExtras(globals);
+        }
+        globals.put(argName, managerProp);
+
+        log.info("Applied global arg {" + argName + ":" + managerProp.get() + "} to step=" + step.getId());
+    }
+
+
+
+    private void refreshResolvedVariableList() {
+        ObservableList<ArgEntry> items = resolvedVariableList.getItems();
+        if (items == null) {
+            items = FXCollections.observableArrayList();
+            resolvedVariableList.setItems(items);
+        }
+
+        List<ArgEntry> updatedEntries = new ArrayList<>();
+        ObservableList<TestStep> allSteps = tableView.getItems();
+        int rowIndex = 1;
+
+        for (TestStep step : allSteps) {
+            if (step == null) {
+                rowIndex++;
+                continue;
+            }
+
+            // --- Ensure extras are linked ---
+            Map<String, StringProperty> extras = step.getExtras();
+            if (extras == null || !(extras instanceof LinkedHashMap)) {
+                extras = new LinkedHashMap<>();
+                step.setExtras(extras);
+            }
+
+            // --- Add missing args based on action ---
+            List<String> args = argsByAction.getOrDefault(step.getAction(), List.of());
+            for (String arg : args) {
+                extras.computeIfAbsent(arg, k -> new SimpleStringProperty(""));
+            }
+
+            // --- Add header entry for this row ---
+            String action = step.getAction();
+            if (action != null && !action.isBlank()) {
+                updatedEntries.add(new ArgEntry(
+                        rowIndex,
+                        step.getId(),
+                        "Row " + rowIndex + ": " + action,
+                        new SimpleStringProperty("") // header only
+                ));
+            }
+
+            // --- Add step extras (manual entries) ---
+            for (Map.Entry<String, StringProperty> entry : extras.entrySet()) {
+                ArgEntry existing = findExisting(items, rowIndex, step.getId(), entry.getKey());
+                if (existing != null) {
+                    updatedEntries.add(existing); // reuse existing
+                } else {
+                    updatedEntries.add(new ArgEntry(
+                            rowIndex,
+                            step.getId(),
+                            entry.getKey(),
+                            entry.getValue() // reuse property directly
+                    ));
+                }
+            }
+
+            // --- Add global extras (manager-linked) ---
+            if (step.getGlobalExtras() != null) {
+                for (Map.Entry<String, StringProperty> global : step.getGlobalExtras().entrySet()) {
+                    ArgEntry existing = findExisting(items, rowIndex, step.getId(), global.getKey());
+                    if (existing != null) {
+                        updatedEntries.add(existing); // reuse existing
+                    } else {
+                        updatedEntries.add(new ArgEntry(
+                                rowIndex,
+                                step.getId(),
+                                global.getKey(),
+                                global.getValue(), // reuse manager property
+                                true // mark as global
+                        ));
+                    }
+                }
+            }
+
+            rowIndex++;
+        }
+
+        // --- Update list in place ---
+        items.setAll(updatedEntries);
+
+        log.info("ResolvedVariableList refreshed with " + items.size() + " entries (including headers + globals).");
+    }
+
+    // Helper to find existing ArgEntry
+    private ArgEntry findExisting(List<ArgEntry> items, int rowIndex, String stepId, String name) {
+        for (ArgEntry a : items) {
+            if (a.getRowIndex() == rowIndex
+                    && a.getStepId().equals(stepId)
+                    && a.getName().equals(name)) {
+                return a;
+            }
+        }
+        return null;
+    }
+
+
+
+    class ArgCell extends TableCell<TestStep, ArgEntry> {
+        private TextField textField;
+
+        public ArgCell() {
+            textField = new TextField();
+
+            // Ctrl+Space handler once per cell
+            textField.addEventFilter(KeyEvent.KEY_PRESSED, event -> {
+                ArgEntry activeEntry = getItem();
+                if (activeEntry != null && !activeEntry.isHeader()) {
+                    if (event.isControlDown() && event.getCode() == KeyCode.SPACE) {
+                        TestStep step = findStepById(activeEntry.getStepId());
+                        showGlobalArgSuggestions(textField, step);
+                        event.consume();
+                    }
+                }
+            });
+        }
+
+        @Override
+        public void startEdit() {
+            super.startEdit();
+            ArgEntry activeEntry = getItem();
+            if (activeEntry != null && !activeEntry.isHeader()) {
+                // rebind safely
+                textField.textProperty().unbindBidirectional(activeEntry.valueProperty());
+                textField.textProperty().bindBidirectional(activeEntry.valueProperty());
+                setGraphic(textField);
+                setText(null);
+            }
+        }
+
+        @Override
+        protected void updateItem(ArgEntry entry, boolean empty) {
+            super.updateItem(entry, empty);
+
+            if (empty || entry == null) {
+                setGraphic(null);
+                setText(null);
+                return;
+            }
+
+            if (entry.isHeader()) {
+                setText(entry.getName());
+                setGraphic(null);
+            } else {
+                // rebind safely
+                textField.textProperty().unbind();
+                textField.textProperty().unbindBidirectional(entry.valueProperty());
+                textField.textProperty().bindBidirectional(entry.valueProperty());
+
+                // visual cue for globals
+                if (entry.isGlobal()) {
+                    textField.setStyle("-fx-text-fill: blue; -fx-font-weight: bold;");
+                    textField.setPromptText("[GLOBAL] " + entry.getName());
+                } else {
+                    textField.setStyle("");
+                    textField.setPromptText(entry.getName());
+                }
+
+                setGraphic(textField);
+                setText(null);
+            }
+        }
+    }
+
+
 
 
 

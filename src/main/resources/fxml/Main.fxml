@@ -1,50 +1,50 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<?import javafx.collections.FXCollections?>
 <?import javafx.scene.control.*?>
 <?import javafx.scene.layout.*?>
 <?import org.kordamp.ikonli.javafx.FontIcon?>
-<?import java.lang.String?>
-<?import javafx.collections.FXCollections?>
-<?import javafx.scene.control.*?>
-<?import javafx.scene.layout.*?>
-<?import org.kordamp.ikonli.javafx.FontIcon?>
-<?import java.lang.String?>
-<?import javafx.scene.control.*?>
-<?import javafx.scene.layout.*?>
-<?import org.kordamp.ikonli.javafx.FontIcon?>
-<?import java.lang.String?>
-
 <?import javafx.scene.text.TextFlow?>
+<?import javafx.geometry.Insets?>
+
 <AnchorPane fx:id="rootPane" prefHeight="783.0" prefWidth="1165.0" styleClass="main-background"
             xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1"
             fx:controller="org.automonius.MainController">
 
     <children>
-
-        <!-- Top Menu Bar -->
+        <!-- Top MenuBar -->
         <MenuBar AnchorPane.topAnchor="0.0" AnchorPane.leftAnchor="0.0" AnchorPane.rightAnchor="0.0"
                  styleClass="menu-bar">
             <menus>
-                <!-- Replaced File menu with Context menu -->
+                <!-- Context menu -->
                 <Menu text="Context">
                     <items>
-                        <!-- onAction="#handleAddEnvironment",onAction="#handleAddEntity",onAction="#handleImportProfiles",onAction="#handleExportProfiles" -->
                         <MenuItem text="Add Environment"/>
                         <MenuItem text="Add Entity"/>
                         <SeparatorMenuItem/>
                         <MenuItem text="Import Profiles"/>
                         <MenuItem text="Export Profiles"/>
                         <SeparatorMenuItem/>
-                        <!-- 🔥 New Load Project option -->
                         <MenuItem text="Load Project" onAction="#handleLoadProject"/>
                         <SeparatorMenuItem/>
-                        <!-- 🔥 New Excel export option, separated visually -->
-                        <MenuItem text="Export Excel Report for NonTechnical User" onAction="#handleExportExcel"/>
+                        <MenuItem text="Export Excel Report for NonTechnical User" onAction="#projectExportExcel"/>
                     </items>
                 </Menu>
 
-                <!-- Keep other menus -->
+                <!-- Global Args menu -->
+                <Menu text="Global Args">
+                    <items>
+                        <MenuItem text="Open Global Args Manager" onAction="#globalArgsOpenWindow"/>
+                    </items>
+                </Menu>
+
+                <!-- Scenario menu -->
+                <Menu text="Scenario">
+                    <items>
+                        <MenuItem text="Open Scenario Builder" onAction="#scenarioBuilderOpenWindow"/>
+                    </items>
+                </Menu>
+
+                <!-- Other menus -->
                 <Menu text="Edit">
                     <items>
                         <MenuItem text="Undo"/>
@@ -64,69 +64,45 @@
             </menus>
         </MenuBar>
 
-
-
+        <!-- Bottom: Logs -->
+        <TextArea fx:id="logArea" editable="false" prefRowCount="8"
+                  AnchorPane.leftAnchor="0.0" AnchorPane.rightAnchor="0.0" AnchorPane.bottomAnchor="0.0"/>
 
         <!-- Explorer Panel -->
         <VBox prefWidth="220.0" spacing="10" styleClass="explorer-box"
               AnchorPane.topAnchor="40.0" AnchorPane.leftAnchor="20.0" AnchorPane.bottomAnchor="20.0">
             <children>
-                <!-- Explorer title -->
                 <Label fx:id="testExplorerLabel" text="Test Explorer" styleClass="explorer-label"/>
-
-                <!-- Explorer control buttons -->
                 <HBox spacing="6" alignment="CENTER" styleClass="group-b-box">
                     <children>
                         <Button onAction="#handleNewSuite" styleClass="rounded-addrow-btn">
-                            <graphic>
-                                <FontIcon iconLiteral="mdi-folder-plus" iconSize="16"/>
-                            </graphic>
-                            <tooltip>
-                                <Tooltip text="New Suite"/>
-                            </tooltip>
+                            <graphic><FontIcon iconLiteral="mdi-folder-plus" iconSize="16"/></graphic>
+                            <tooltip><Tooltip text="New Suite"/></tooltip>
                         </Button>
                         <Button onAction="#handleNewSubSuite" styleClass="rounded-addrow-btn">
-                            <graphic>
-                                <FontIcon iconLiteral="mdi-folder-outline" iconSize="16"/>
-                            </graphic>
-                            <tooltip>
-                                <Tooltip text="New Sub-Suite"/>
-                            </tooltip>
+                            <graphic><FontIcon iconLiteral="mdi-folder-outline" iconSize="16"/></graphic>
+                            <tooltip><Tooltip text="New Sub-Suite"/></tooltip>
                         </Button>
                         <Button onAction="#handleNewTestScenario" styleClass="rounded-addrow-btn">
-                            <graphic>
-                                <FontIcon iconLiteral="mdi-file-outline" iconSize="16"/>
-                            </graphic>
-                            <tooltip>
-                                <Tooltip text="New Test Scenario"/>
-                            </tooltip>
+                            <graphic><FontIcon iconLiteral="mdi-file-outline" iconSize="16"/></graphic>
+                            <tooltip><Tooltip text="New Test Scenario"/></tooltip>
                         </Button>
                         <Button onAction="#handleDelete" styleClass="rounded-addrow-btn">
-                            <graphic>
-                                <FontIcon iconLiteral="mdi-delete" iconSize="16"/>
-                            </graphic>
-                            <tooltip>
-                                <Tooltip text="Delete"/>
-                            </tooltip>
+                            <graphic><FontIcon iconLiteral="mdi-delete" iconSize="16"/></graphic>
+                            <tooltip><Tooltip text="Delete"/></tooltip>
                         </Button>
                     </children>
                 </HBox>
 
-                <!-- Suite TreeView -->
                 <TreeView fx:id="treeView"/>
-
-                <!-- Toggle: Show steps in tree -->
                 <CheckBox fx:id="showStepsToggle" text="Show steps in tree" selected="false"/>
                 <TitledPane text="Last Payload Sent" expanded="true">
                     <content>
                         <TextArea fx:id="lastPayloadArea" editable="false" wrapText="true"/>
                     </content>
                 </TitledPane>
-
-
             </children>
         </VBox>
-
 
         <!-- TableView Panel -->
         <VBox prefWidth="620.0" spacing="10" styleClass="table-box"
@@ -139,75 +115,43 @@
                         <HBox spacing="8" styleClass="group-a-box">
                             <children>
                                 <Button fx:id="runBtn" onAction="#handleRun" styleClass="rounded-action-btn">
-                                    <graphic>
-                                        <FontIcon iconLiteral="mdi-play-circle-outline" iconSize="18"/>
-                                    </graphic>
+                                    <graphic><FontIcon iconLiteral="mdi-play-circle-outline" iconSize="18"/></graphic>
                                 </Button>
                                 <Button fx:id="saveBtn" onAction="#handleSave" styleClass="rounded-action-btn">
-                                    <graphic>
-                                        <FontIcon iconLiteral="mdi-content-save" iconSize="18"/>
-                                    </graphic>
+                                    <graphic><FontIcon iconLiteral="mdi-content-save" iconSize="18"/></graphic>
                                 </Button>
                                 <Button fx:id="reportBtn" styleClass="rounded-action-btn">
-                                    <graphic>
-                                        <FontIcon iconLiteral="mdi-file-chart" iconSize="18"/>
-                                    </graphic>
+                                    <graphic><FontIcon iconLiteral="mdi-file-chart" iconSize="18"/></graphic>
                                 </Button>
                                 <Button fx:id="tagBtn" styleClass="rounded-action-btn">
-                                    <graphic>
-                                        <FontIcon iconLiteral="mdi-tag" iconSize="18"/>
-                                    </graphic>
+                                    <graphic><FontIcon iconLiteral="mdi-tag" iconSize="18"/></graphic>
                                 </Button>
                             </children>
                         </HBox>
-
-                        <Region>
-                            <HBox.hgrow>
-                                <Priority fx:constant="ALWAYS"/>
-                            </HBox.hgrow>
-                        </Region>
-
-                        <!-- Keep AddRow/AddColumn/etc. -->
+                        <Region><HBox.hgrow><Priority fx:constant="ALWAYS"/></HBox.hgrow></Region>
                         <HBox spacing="8" styleClass="group-b-box">
                             <children>
                                 <Button fx:id="AddRow" onAction="#handleAddRow" styleClass="rounded-addrow-btn">
-                                    <graphic>
-                                        <FontIcon iconLiteral="mdi-plus" iconSize="16"/>
-                                    </graphic>
+                                    <graphic><FontIcon iconLiteral="mdi-plus" iconSize="16"/></graphic>
                                 </Button>
                                 <Button fx:id="DeleteRow" onAction="#handleDeleteRow" styleClass="rounded-addrow-btn">
-                                    <graphic>
-                                        <FontIcon iconLiteral="mdi-minus" iconSize="16"/>
-                                    </graphic>
+                                    <graphic><FontIcon iconLiteral="mdi-minus" iconSize="16"/></graphic>
                                 </Button>
                                 <Button fx:id="AddColumn" onAction="#handleAddColumn" styleClass="rounded-addrow-btn">
-                                    <graphic>
-                                        <FontIcon iconLiteral="mdi-table-column-plus-after" iconSize="16"/>
-                                    </graphic>
+                                    <graphic><FontIcon iconLiteral="mdi-table-column-plus-after" iconSize="16"/></graphic>
                                 </Button>
-                                <Button fx:id="DeleteColumn">
-                                        styleClass="rounded-addrow-btn">
-                                    <graphic>
-                                        <FontIcon iconLiteral="mdi-table-column-remove" iconSize="16"/>
-                                    </graphic>
+                                <Button fx:id="DeleteColumn" styleClass="rounded-addrow-btn">
+                                    <graphic><FontIcon iconLiteral="mdi-table-column-remove" iconSize="16"/></graphic>
                                 </Button>
                                 <Button fx:id="MoveUp" onAction="#handleMoveUp" styleClass="rounded-addrow-btn">
-                                    <graphic>
-                                        <FontIcon iconLiteral="mdi-arrow-up" iconSize="16"/>
-                                    </graphic>
+                                    <graphic><FontIcon iconLiteral="mdi-arrow-up" iconSize="16"/></graphic>
                                 </Button>
                                 <Button fx:id="MoveDown" onAction="#handleMoveDown" styleClass="rounded-addrow-btn">
-                                    <graphic>
-                                        <FontIcon iconLiteral="mdi-arrow-down" iconSize="16"/>
-                                    </graphic>
+                                    <graphic><FontIcon iconLiteral="mdi-arrow-down" iconSize="16"/></graphic>
                                 </Button>
                                 <Button fx:id="refreshBtn" onAction="#handleRefresh" styleClass="rounded-addrow-btn">
-                                    <graphic>
-                                        <FontIcon iconLiteral="mdi-refresh" iconSize="16"/>
-                                    </graphic>
-                                    <tooltip>
-                                        <Tooltip text="Refresh TableView"/>
-                                    </tooltip>
+                                    <graphic><FontIcon iconLiteral="mdi-refresh" iconSize="16"/></graphic>
+                                    <tooltip><Tooltip text="Refresh TableView"/></tooltip>
                                 </Button>
                             </children>
                         </HBox>
@@ -223,18 +167,16 @@
                         <TableColumn fx:id="actionColumn" text="Action"/>
                         <TableColumn fx:id="typeColumn" text="Type"/>
                         <TableColumn fx:id="descriptionColumn" text="Description"/>
-                        <!-- Dynamic argument columns -->
                         <TableColumn fx:id="argumentsColumn" text="Arguments"/>
                         <TableColumn fx:id="statusColumn" text="Status"/>
                     </columns>
                 </TableView>
 
-
                 <!-- Execution Preview -->
                 <TitledPane text="Execution Preview" expanded="false" styleClass="execution-preview-box">
-                        <content>
-                            <TextFlow fx:id="executionPreviewFlow"/>
-                        </content>
+                    <content>
+                        <TextFlow fx:id="executionPreviewFlow"/>
+                    </content>
                 </TitledPane>
             </children>
         </VBox>
@@ -290,8 +232,5 @@
             </children>
         </VBox>
 
-
-
     </children>
 </AnchorPane>
-
