@@ -2,53 +2,26 @@ package org.automonius;
 
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Logger;
 
-/**
- * Central registry of expected argument keys for each action.
- * Provides validation to catch missing mappings early.
- */
 public final class ArgRegistry {
-
     private static final Logger LOG = Logger.getLogger(ArgRegistry.class.getName());
 
-    // --- Static mapping of actions to expected args ---
-    private static final Map<String, List<String>> argsByAction = Map.of(
-            // File actions
-            "checkFileContainsKeyword", List.of("path", "keyword"),
+    // Dynamic mapping populated at runtime
+    private static final Map<String, List<String>> argsByAction = new ConcurrentHashMap<>();
 
-            // Web actions
-            "sendRequest", List.of("url", "method", "headers", "body"),
-            "assertResponse", List.of("statusCode", "expectedBody"),
+    private ArgRegistry() {}
 
-            // UI actions
-            "clickButton", List.of("buttonId"),
-            "enterText", List.of("selector", "text"),
-
-            // Navigation
-            "navigate", List.of("url"),
-
-            // Validation
-            "assertText", List.of("selector", "expectedText")
-    );
-
-    private ArgRegistry() {
-        // prevent instantiation
+    /** Register an action with its expected inputs */
+    public static void register(String action, List<String> inputs) {
+        argsByAction.put(action, inputs);
+        LOG.info(() -> "[ArgRegistry] Registered action=" + action + " args=" + inputs);
     }
 
-    /**
-     * Get the expected argument keys for a given action.
-     * Logs a warning if the action is not defined in the registry.
-     */
+    /** Get expected args for an action */
     public static List<String> getArgsForAction(String action) {
-        if (action == null || action.isBlank()) {
-            return List.of();
-        }
-        List<String> args = argsByAction.get(action);
-        if (args == null) {
-            LOG.warning("[ArgRegistry] No mapping found for action: " + action);
-            return List.of();
-        }
-        return args;
+        if (action == null || action.isBlank()) return List.of();
+        return argsByAction.getOrDefault(action, List.of());
     }
 }

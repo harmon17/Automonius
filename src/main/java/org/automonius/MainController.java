@@ -227,7 +227,6 @@ public class MainController {
 
         argsByObject.clear();
         actionsByObject.clear();
-        argsByAction.clear();
 
         for (Map.Entry<String, TestCase> entry : discovered.entrySet()) {
             String actionName = entry.getKey();
@@ -235,11 +234,14 @@ public class MainController {
             String objectName = tc.getObjectName();
             List<String> inputs = tc.getInputs();
 
-            argsByAction.put(actionName, new ArrayList<>(inputs));
+            // ✅ Register dynamically
+            ArgRegistry.register(actionName, inputs);
+
             actionsByObject.computeIfAbsent(objectName, k -> new ArrayList<>()).add(actionName);
             argsByObject.computeIfAbsent(objectName, k -> new ArrayList<>()).addAll(inputs);
         }
     }
+
 
     // --- Initialize first step defaults ---
     private void initializeDefaults() {
