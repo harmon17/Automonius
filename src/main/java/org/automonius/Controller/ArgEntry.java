@@ -11,47 +11,45 @@ public class ArgEntry {
     private final int rowIndex;
     private final String stepId;
     private final String name;
-    private final StringProperty boundValue; // reference to TestStep property
-    private final boolean isHeader;
-    private final boolean isGlobal;
+    private final StringProperty value;
+    private final boolean header;
+    private final boolean global;
 
-    // Header entry (no bound value)
+    // Header constructor
     public ArgEntry(int rowIndex, String stepId, String name) {
         this.rowIndex = rowIndex;
         this.stepId = stepId;
         this.name = name;
-        this.boundValue = null;
-        this.isGlobal = false;
-        this.isHeader = true;
+        this.value = null;
+        this.header = true;
+        this.global = false;
     }
 
-    // Manual arg entry
-    public ArgEntry(int rowIndex, String stepId, String name, StringProperty boundValue) {
-        this(rowIndex, stepId, name, boundValue, false);
+    // Argument constructor (manual/local)
+    public ArgEntry(int rowIndex, String stepId, String name, StringProperty value) {
+        this(rowIndex, stepId, name, value, false, false);
     }
 
-    // Global arg entry
-    public ArgEntry(int rowIndex, String stepId, String name, StringProperty boundValue, boolean isGlobal) {
+    // Argument constructor (global)
+    public ArgEntry(int rowIndex, String stepId, String name, StringProperty value, boolean global) {
+        this(rowIndex, stepId, name, value, false, global);
+    }
+
+    private ArgEntry(int rowIndex, String stepId, String name, StringProperty value,
+                     boolean header, boolean global) {
         this.rowIndex = rowIndex;
         this.stepId = stepId;
         this.name = name;
-        this.boundValue = boundValue; // reference to TestStep map property
-        this.isGlobal = isGlobal;
-        this.isHeader = false;
+        this.value = value;
+        this.header = header;
+        this.global = global;
     }
 
+    // --- Getters ---
     public int getRowIndex() { return rowIndex; }
     public String getStepId() { return stepId; }
     public String getName() { return name; }
-    public StringProperty valueProperty() { return boundValue; }
-    public boolean isHeader() { return isHeader; }
-    public boolean isGlobal() { return isGlobal; }
-
-    @Override
-    public String toString() {
-        if (isHeader) return name;
-        return (isGlobal ? "[GLOBAL] " : "") +
-                "Row " + rowIndex + " [" + stepId + "] " +
-                name + "=" + (boundValue != null ? boundValue.get() : "");
-    }
+    public StringProperty valueProperty() { return value; }
+    public boolean isHeader() { return header; }
+    public boolean isGlobal() { return global; }   // ✅ Added this
 }

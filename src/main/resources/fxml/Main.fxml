@@ -214,11 +214,12 @@
                 </HBox>
 
                 <!-- Resolved Variables -->
-                <TitledPane text="Resolved Variables" expanded="true">
+                <TitledPane fx:id="resolvedVariablePane" text="Resolved Variables" expanded="true">
                     <content>
                         <ListView fx:id="resolvedVariableList"/>
                     </content>
                 </TitledPane>
+
 
                 <!-- Payload editor trigger -->
                 <Button text="Edit Payload" onAction="#handleEditPayload"/>

@@ -93,6 +93,16 @@ public class TestScenario {
         log.info(() -> "Copied TestScenario from " + original.getId() + " to new id=" + this.id);
     }
 
+    // --- Convenience constructor: build scenario directly from steps ---
+    public TestScenario(ObservableList<TestStep> steps) {
+        this(UUID.randomUUID().toString(), "Scenario from TableView");
+        if (steps != null) {
+            this.steps.addAll(steps);
+        }
+        log.info(() -> "Created TestScenario from existing steps, id=" + id + ", stepCount=" + this.steps.size());
+    }
+
+
     // --- ID ---
     public String getId() {
         return id;
@@ -184,5 +194,7 @@ public class TestScenario {
                 .map(StringProperty::get)   // ✅ use StringProperty here
                 .toList();
     }
+
+
 
 }

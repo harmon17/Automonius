@@ -69,19 +69,23 @@ public class TestStep {
                 original.getDescription(),
                 original.getType(),
                 original.getStatus(),
-                original.getExtras(),   // ✅ pass Map<String,StringProperty>
-                0,                      // placeholder, will be recalculated
+                null, // extras will be rebuilt
+                0,
                 false);
 
-        // Copy global extras separately
+        // ✅ Copy extras with values
+        original.getExtras().forEach((k, v) -> this.setExtra(k, v.get()));
+
+        // ✅ Copy global extras
         original.getGlobalExtras().forEach((k, v) ->
                 this.globalExtras.put(k, new SimpleStringProperty(v.get()))
         );
 
-        // ✅ Recalculate maxArgs from ArgRegistry
+        // ✅ Recalculate maxArgs
         List<String> expectedArgs = ArgRegistry.getArgsForAction(original.getAction());
         this.maxArgs = expectedArgs.size();
     }
+
 
 
 
@@ -195,7 +199,8 @@ public class TestStep {
     public Map<String, StringProperty> getExtras() { return Collections.unmodifiableMap(extras); }
 
     public void setExtras(Map<String, StringProperty> newExtras) {
-        extras.clear();
+        extras.clear(); // ✅ clear existing contents
+
         if (newExtras != null) {
             newExtras.forEach((key, prop) -> {
                 attachDirtyListener(prop, key);
@@ -203,7 +208,7 @@ public class TestStep {
             });
         }
 
-        // --- Ensure expected args remain visible ---
+        // ✅ Ensure expected args are injected
         List<String> expectedArgs = ArgRegistry.getArgsForAction(getAction());
         for (String arg : expectedArgs) {
             extras.computeIfAbsent(arg, k -> {

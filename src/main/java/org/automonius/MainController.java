@@ -11,10 +11,12 @@ import javafx.beans.property.ReadOnlyStringWrapper;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.beans.property.StringProperty;
 import javafx.collections.FXCollections;
+import javafx.collections.ListChangeListener;
 import javafx.collections.ObservableList;
 import javafx.event.ActionEvent;
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
+import javafx.geometry.Pos;
 import javafx.geometry.Side;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
@@ -25,6 +27,9 @@ import javafx.scene.control.cell.TextFieldTableCell;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.scene.input.*;
+import javafx.scene.layout.HBox;
+import javafx.scene.layout.Pane;
+import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
 import javafx.stage.FileChooser;
 import javafx.stage.Modality;
@@ -135,6 +140,8 @@ public class MainController {
     private TextArea resolvedPayloadArea;
     @FXML
     private TextArea lastPayloadArea;
+    @FXML private TitledPane resolvedVariablePane;
+    @FXML private ListView<ArgEntry> resolvedVariableList;
 
 
 
@@ -169,11 +176,6 @@ public class MainController {
 
     @FXML
     private void projectExportExcel(ActionEvent e) { /* export Excel report */ }
-    @FXML
-    private ListView<ArgEntry> resolvedVariableList;
-
-
-
     private Stage primaryStage; // Setter called from Main.start()
 
     public void setPrimaryStage(Stage stage) {
@@ -198,25 +200,29 @@ public class MainController {
         // ✅ Populate step args list (for ListView)
         refreshResolvedVariableList();
 
+        // ✅ Attach listeners once per step (fixes arg‑field rebuilds)
+        setupStepListeners();
+
         // --- 3. Wire up interactions ---
-        setupClipboard();         // copy/paste shortcuts
-        setupTreeContextMenu();   // right-click menu for suites/scenarios
-        setupTableContextMenu();  // right-click menu for steps
-        enableDragAndDrop(treeView); // drag/drop in tree
+        setupClipboard();
+        setupTreeContextMenu();
+        setupTableContextMenu();
+        enableDragAndDrop(treeView);
 
         // ✅ Payload args → Ctrl+Space popup in editors
-        enableGlobalArgAutocomplete(resolvedPayloadArea, true); // payload args
-        enableGlobalArgAutocomplete(lastPayloadArea, true);     // payload args
+        enableGlobalArgAutocomplete(resolvedPayloadArea, true);
+        enableGlobalArgAutocomplete(lastPayloadArea, true);
 
         // --- 4. Add listeners/toggles ---
-        setupToggleListener();    // show/hide steps toggle
-        setupSelectionListener(); // sync TreeView ↔ TableView ↔ ListView
+        setupToggleListener();
+        setupSelectionListener();
 
         // --- 5. Logs ---
-        setupLogArea();           // prepare log area for execution feedback
+        setupLogArea();
 
         log.info("MainController.initialize() finished");
     }
+
 
 
 
@@ -2597,8 +2603,6 @@ public class MainController {
 
 
     private void syncScenarioToContext(TestScenario scenario) {
-        String contextKey = getCurrentContextKey();
-
         List<ArgEntry> argEntries = new ArrayList<>();
         int rowIndex = 1;
 
@@ -2609,126 +2613,72 @@ public class MainController {
                 continue;
             }
 
-            // --- Ensure extras/globalExtras maps exist ---
             Map<String, StringProperty> extras = step.getExtras();
-            if (extras == null || !(extras instanceof LinkedHashMap)) {
+            if (extras == null) {
                 extras = new LinkedHashMap<>();
                 step.setExtras(extras);
             }
 
             Map<String, StringProperty> globals = step.getGlobalExtras();
-            if (globals == null || !(globals instanceof LinkedHashMap)) {
+            if (globals == null) {
                 globals = new LinkedHashMap<>();
                 step.setGlobalExtras(globals);
             }
 
-            // --- Merge expected args ---
             List<String> args = argsByAction.getOrDefault(action, List.of());
             for (String arg : args) {
                 if (GlobalArgsManager.getGlobalArgs().containsKey(arg)) {
-                    // ✅ Link to manager property for globals
-                    StringProperty managerProp = GlobalArgsManager.getGlobalArgs().get(arg);
-                    globals.put(arg, managerProp);
+                    globals.putIfAbsent(arg, GlobalArgsManager.getGlobalArgs().get(arg));
                 } else {
-                    // ✅ Reuse or create local property
                     extras.computeIfAbsent(arg, k -> new SimpleStringProperty(""));
                 }
             }
-            step.setMaxArgs(extras.size() + globals.size());
 
-            // --- Add grouping header for this step/action ---
-            argEntries.add(new ArgEntry(
-                    rowIndex,
-                    step.getId(),
-                    "Row " + rowIndex + ": " + action,
-                    new SimpleStringProperty("") // header only
-            ));
+            // Header
+            argEntries.add(new ArgEntry(rowIndex, step.getId(),
+                    "Row " + rowIndex + ": " + action));
 
-            // --- Add all extras as editable entries ---
-            for (Map.Entry<String, StringProperty> entry : extras.entrySet()) {
-                argEntries.add(new ArgEntry(rowIndex, step.getId(),
-                        entry.getKey(), entry.getValue())); // reuse property
-            }
-
-            // --- Add all globals as editable entries ---
-            for (Map.Entry<String, StringProperty> global : globals.entrySet()) {
-                argEntries.add(new ArgEntry(rowIndex, step.getId(),
-                        global.getKey(), global.getValue(), true)); // reuse manager property
+            // Arguments
+            for (String arg : args) {
+                if (globals.containsKey(arg)) {
+                    argEntries.add(new ArgEntry(rowIndex, step.getId(), arg, globals.get(arg)));
+                } else if (extras.containsKey(arg)) {
+                    argEntries.add(new ArgEntry(rowIndex, step.getId(), arg, extras.get(arg)));
+                }
             }
 
             rowIndex++;
         }
 
-        // --- Build context variables map (reuse property values) ---
-        Map<String, String> vars = tableView.getItems().stream()
-                .flatMap(s -> Stream.concat(
-                        s.getExtras().entrySet().stream(),
-                        s.getGlobalExtras() != null ? s.getGlobalExtras().entrySet().stream() : Stream.empty()
-                ))
-                .collect(Collectors.toMap(
-                        Map.Entry::getKey,
-                        e -> e.getValue().get(),
-                        (a, b) -> b,
-                        LinkedHashMap::new
-                ));
-        contextVariables.put(contextKey, vars);
-
-        // --- Populate ListView with ArgEntry objects ---
         resolvedVariableList.setItems(FXCollections.observableArrayList(argEntries));
         resolvedVariableList.setPlaceholder(new Label("No arguments discovered"));
 
-        vars.forEach((name, value) -> log.info(() -> String.format(
-                "[SYNC LOAD] scenario=%s, var=%s, value=%s",
-                scenario.getId(), name, value
-        )));
-
-        // --- Cell factory: headers vs editable args ---
-        resolvedVariableList.setCellFactory(list -> new TextFieldListCell<>(new StringConverter<ArgEntry>() {
-            @Override
-            public String toString(ArgEntry entry) {
-                if (entry == null) return "";
-                if (entry.isHeader()) return entry.getName();
-                return entry.getName() + "=" + entry.valueProperty().get();
-            }
+        // Cell factory
+        resolvedVariableList.setCellFactory(listView -> new ListCell<>() {
+            private final TextField textField = new TextField();
 
             @Override
-            public ArgEntry fromString(String string) {
-                ArgEntry entry = resolvedVariableList.getSelectionModel().getSelectedItem();
-                if (entry != null && !entry.isHeader()) {
-                    String[] parts = string.split("=", 2);
-                    if (parts.length == 2) {
-                        entry.valueProperty().set(parts[1]);
-                        logExecutionEvent("ARG", String.format(
-                                "row=%d, stepId=%s, arg=%s, value=%s",
-                                entry.getRowIndex(),
-                                entry.getStepId(),
-                                entry.getName(),
-                                parts[1]
-                        ));
-                    }
-                }
-                return entry;
-            }
-        }) {
-            @Override
-            public void startEdit() {
-                super.startEdit();
-                TextField textField = (TextField) getGraphic();
-                ArgEntry activeEntry = getItem();
+            protected void updateItem(ArgEntry entry, boolean empty) {
+                super.updateItem(entry, empty);
 
-                if (textField != null && activeEntry != null && !activeEntry.isHeader()) {
-                    textField.addEventFilter(KeyEvent.KEY_PRESSED, event -> {
-                        if (event.isControlDown() && event.getCode() == KeyCode.SPACE) {
-                            // ✅ Show global arg suggestions for this step
-                            TestStep step = findStepById(activeEntry.getStepId());
-                            showGlobalArgSuggestions(textField, step);
-                            event.consume();
-                        }
-                    });
+                if (empty || entry == null) {
+                    setText(null);
+                    setGraphic(null);
+                } else if (entry.isHeader()) {
+                    setText(entry.getName());
+                    setStyle("-fx-font-weight: bold; -fx-text-fill: #1a73e8;");
+                    setGraphic(null);
+                } else {
+                    textField.textProperty().unbind();
+                    textField.textProperty().bindBidirectional(entry.valueProperty());
+                    textField.setPromptText(entry.getName());
+                    setGraphic(textField);
+                    setText(null);
                 }
             }
         });
     }
+
 
 
     private void showGlobalArgSuggestions(TextField field, TestStep step) {
@@ -3909,144 +3859,136 @@ public class MainController {
 
 
     private void setupResolvedVariableList() {
-        resolvedVariableList.setEditable(true);
-        resolvedVariableList.setPlaceholder(new Label("No arguments discovered"));
+        // Build scenario directly from tableView
+        ObservableList<TestStep> steps = tableView.getItems();
 
-        resolvedVariableList.setCellFactory(list -> new ListCell<ArgEntry>() {
-            private final TextField textField = new TextField();
+        Accordion accordion = new Accordion();
+        int rowIndex = 1;
 
-            @Override
-            protected void updateItem(ArgEntry entry, boolean empty) {
-                super.updateItem(entry, empty);
+        for (TestStep step : steps) {
+            if (step == null || step.getAction() == null || step.getAction().isBlank()) {
+                rowIndex++;
+                continue;
+            }
 
-                if (empty || entry == null) {
-                    textField.textProperty().unbind();
-                    setGraphic(null);
-                    setText(null);
-                    return;
-                }
+            // --- Header: ActionName ---
+            String headerTitle = "Row " + rowIndex + ": " + step.getAction();
+            VBox argBox = new VBox(6);
 
-                if (entry.isHeader()) {
-                    setText(entry.getName());
-                    setGraphic(null);
-                    setStyle("-fx-background-color: #f0f0f0; -fx-font-weight: bold; -fx-text-fill: #1a73e8;");
-                } else {
-                    textField.textProperty().unbind();
-                    textField.textProperty().bindBidirectional(entry.valueProperty());
+            // --- Expected args ---
+            List<String> expectedArgs = ArgRegistry.getArgsForAction(step.getAction());
+            if (expectedArgs != null) {
+                for (String arg : expectedArgs) {
+                    final String argName = arg;
+                    final int currentRow = rowIndex;
 
-                    if (entry.isGlobal()) {
-                        textField.setStyle("-fx-text-fill: blue; -fx-font-weight: bold;");
-                        textField.setPromptText("[GLOBAL] " + entry.getName());
-
-                        // --- Detect manual override of a global ---
-                        textField.textProperty().addListener((obs, oldVal, newVal) -> {
-                            if (newVal != null && !newVal.equals(oldVal)) {
-                                TestStep step = tableView.getSelectionModel().getSelectedItem();
-                                if (step != null) {
-                                    // --- Transition: global → manual ---
-                                    step.demoteToExtra(entry.getName(), newVal);
-
-                                    // rebind entry to its own property
-                                    entry.valueProperty().unbind();
-                                    entry.valueProperty().bindBidirectional(step.getExtraProperty(entry.getName()));
-
-                                    refreshResolvedVariableList();
-
-                                    logExecutionEvent("ARG", String.format(
-                                            "row=%d, stepId=%s, arg=%s (demoted to manual value=%s)",
-                                            entry.getRowIndex(),
-                                            entry.getStepId(),
-                                            entry.getName(),
-                                            newVal
-                                    ));
-                                }
-                            }
-                        });
-                    } else {
-                        textField.setStyle("");
-                        textField.setPromptText(entry.getName());
-
-                        // --- Persist manual edits into stepExtras ---
-                        textField.textProperty().addListener((obs, oldVal, newVal) -> {
-                            if (newVal != null && !newVal.equals(oldVal)) {
-                                TestStep step = tableView.getSelectionModel().getSelectedItem();
-                                if (step != null) {
-                                    step.setExtra(entry.getName(), newVal);
-
-                                    logExecutionEvent("ARG", String.format(
-                                            "row=%d, stepId=%s, arg=%s (manual value=%s)",
-                                            entry.getRowIndex(),
-                                            entry.getStepId(),
-                                            entry.getName(),
-                                            newVal
-                                    ));
-                                }
-                            }
-                        });
+                    StringProperty prop = step.getExtraProperty(argName);
+                    if (prop == null) {
+                        prop = new SimpleStringProperty("");
+                        step.getExtras().put(argName, prop);
                     }
 
-                    setGraphic(textField);
-                    setText(null);
-                }
-            }
-        });
+                    Label argLabel = new Label(argName + ":");
+                    TextField argField = new TextField();
+                    argField.textProperty().bindBidirectional(prop);
 
-        // --- Double‑click → start editing ---
-        resolvedVariableList.setOnMouseClicked(event -> {
-            if (event.getClickCount() == 2) {
-                int index = resolvedVariableList.getSelectionModel().getSelectedIndex();
-                if (index >= 0) {
-                    resolvedVariableList.edit(index);
-                }
-            }
-        });
-
-        // --- Ctrl+Space → show global args popup ---
-        resolvedVariableList.addEventFilter(KeyEvent.KEY_PRESSED, event -> {
-            if (event.isControlDown() && event.getCode() == KeyCode.SPACE) {
-                event.consume();
-
-                ContextMenu suggestions = new ContextMenu();
-                GlobalArgsManager.getStepArgsSnapshot().forEach(arg -> {
-                    String label = "{" + arg.getFieldName() + ":" + arg.getValue() + "}";
-                    MenuItem item = new MenuItem(label);
-
-                    item.setOnAction(e -> {
-                        TestStep step = tableView.getSelectionModel().getSelectedItem();
-                        ArgEntry entry = resolvedVariableList.getSelectionModel().getSelectedItem();
-
-                        if (step != null && entry != null && !entry.isHeader()) {
-                            StringProperty globalProp = GlobalArgsManager.getGlobalArgs().get(arg.getFieldName());
-                            if (globalProp != null) {
-                                // --- Transition: manual → global ---
-                                step.promoteToGlobal(entry.getName(), globalProp);
-
-                                // --- Guard against self‑binding ---
-                                if (entry.valueProperty() != globalProp) {
-                                    entry.valueProperty().unbind();
-                                    entry.valueProperty().bindBidirectional(globalProp);
-                                }
-
-                                refreshResolvedVariableList();
-                                suggestions.hide();
-
-                                logExecutionEvent("ARG", String.format(
-                                        "row=%d, stepId=%s, arg=%s (bound to global %s)",
-                                        entry.getRowIndex(),
-                                        entry.getStepId(),
-                                        entry.getName(),
-                                        arg.getFieldName()
-                                ));
-                            }
+                    // Persist manual edits
+                    argField.textProperty().addListener((obs, oldVal, newVal) -> {
+                        if (newVal != null && !newVal.equals(oldVal)) {
+                            step.setExtra(argName, newVal);
+                            logExecutionEvent("ARG", String.format(
+                                    "row=%d, stepId=%s, arg=%s (manual value=%s)",
+                                    currentRow,
+                                    step.getId(),
+                                    argName,
+                                    newVal
+                            ));
                         }
                     });
 
-                    suggestions.getItems().add(item);
-                });
+                    // Ctrl+Space → global binding
+                    argField.addEventFilter(KeyEvent.KEY_PRESSED, event -> {
+                        if (event.isControlDown() && event.getCode() == KeyCode.SPACE) {
+                            event.consume();
+                            ContextMenu suggestions = new ContextMenu();
+                            GlobalArgsManager.getStepArgsSnapshot().forEach(globalArg -> {
+                                String label = "{" + globalArg.getFieldName() + ":" + globalArg.getValue() + "}";
+                                MenuItem item = new MenuItem(label);
 
-                suggestions.show(resolvedVariableList, Side.BOTTOM, 0, 0);
+                                item.setOnAction(e -> {
+                                    StringProperty globalProp = GlobalArgsManager.getGlobalArgs().get(globalArg.getFieldName());
+                                    if (globalProp != null) {
+                                        step.promoteToGlobal(argName, globalProp);
+                                        argField.textProperty().unbind();
+                                        argField.textProperty().bindBidirectional(globalProp);
+
+                                        logExecutionEvent("ARG", String.format(
+                                                "row=%d, stepId=%s, arg=%s (bound to global %s)",
+                                                currentRow,
+                                                step.getId(),
+                                                argName,
+                                                globalArg.getFieldName()
+                                        ));
+                                    }
+                                    suggestions.hide();
+                                });
+
+                                suggestions.getItems().add(item);
+                            });
+                            suggestions.show(argField, Side.BOTTOM, 0, 0);
+                        }
+                    });
+
+                    HBox row = new HBox(8, argLabel, argField);
+                    row.setStyle("-fx-padding: 0 0 0 20;");
+                    argBox.getChildren().add(row);
+                }
             }
-        });
+
+            // --- Global args ---
+            Map<String, StringProperty> globals = step.getGlobalExtras();
+            if (globals != null) {
+                for (Map.Entry<String, StringProperty> global : globals.entrySet()) {
+                    final String globalKey = global.getKey();
+                    final int currentRow = rowIndex;
+
+                    Label argLabel = new Label(globalKey + ":");
+                    TextField argField = new TextField();
+                    argField.textProperty().bindBidirectional(global.getValue());
+                    argField.setStyle("-fx-text-fill: blue; -fx-font-weight: bold;");
+                    argField.setPromptText("[GLOBAL] " + globalKey);
+
+                    // Detect manual override
+                    argField.textProperty().addListener((obs, oldVal, newVal) -> {
+                        if (newVal != null && !newVal.equals(oldVal)) {
+                            step.demoteToExtra(globalKey, newVal);
+                            argField.textProperty().unbind();
+                            argField.textProperty().bindBidirectional(step.getExtraProperty(globalKey));
+
+                            logExecutionEvent("ARG", String.format(
+                                    "row=%d, stepId=%s, arg=%s (demoted to manual value=%s)",
+                                    currentRow,
+                                    step.getId(),
+                                    globalKey,
+                                    newVal
+                            ));
+                        }
+                    });
+
+                    HBox row = new HBox(8, argLabel, argField);
+                    row.setStyle("-fx-padding: 0 0 0 20;");
+                    argBox.getChildren().add(row);
+                }
+            }
+
+            // --- Add pane per step ---
+            TitledPane pane = new TitledPane(headerTitle, argBox);
+            accordion.getPanes().add(pane);
+            rowIndex++;
+        }
+
+        // Replace ListView with Accordion inside the TitledPane
+        resolvedVariablePane.setContent(accordion);
     }
 
 
@@ -4125,7 +4067,28 @@ public class MainController {
         log.info("Applied global arg {" + argName + ":" + managerProp.get() + "} to step=" + step.getId());
     }
 
+    private void setupStepListeners() {
+        // Attach listeners for existing steps
+        for (TestStep step : tableView.getItems()) {
+            attachStepListeners(step);
+        }
 
+        // Attach listeners for any new steps added later
+        tableView.getItems().addListener((ListChangeListener<TestStep>) change -> {
+            while (change.next()) {
+                if (change.wasAdded()) {
+                    for (TestStep added : change.getAddedSubList()) {
+                        attachStepListeners(added);
+                    }
+                }
+            }
+        });
+    }
+
+    private void attachStepListeners(TestStep step) {
+        step.objectProperty().addListener((obs, oldVal, newVal) -> refreshResolvedVariableList());
+        step.actionProperty().addListener((obs, oldVal, newVal) -> refreshResolvedVariableList());
+    }
 
     private void refreshResolvedVariableList() {
         ObservableList<ArgEntry> items = resolvedVariableList.getItems();
@@ -4135,60 +4098,91 @@ public class MainController {
         }
 
         List<ArgEntry> updatedEntries = new ArrayList<>();
-        ObservableList<TestStep> allSteps = tableView.getItems();
+        Accordion accordion = new Accordion();
         int rowIndex = 1;
 
-        for (TestStep step : allSteps) {
-            if (step == null) {
-                continue; // ✅ skip without bumping rowIndex
+        for (TestStep step : tableView.getItems()) {
+            if (step == null || step.getAction() == null || step.getAction().isBlank()) {
+                rowIndex++;
+                continue;
             }
 
-            // --- Add header entry for this row ---
-            String action = step.getAction();
-            if (action != null && !action.isBlank()) {
-                updatedEntries.add(new ArgEntry(
-                        rowIndex,
-                        step.getId(),
-                        "Row " + rowIndex + ": " + action // header only
-                ));
-            }
+            final int currentRowIndex = rowIndex;
+            final VBox argBox = new VBox(8);
+            argBox.setAlignment(Pos.TOP_LEFT);
 
-            // --- Add step extras (manual entries) ---
-            Map<String, StringProperty> extras = step.getExtras();
-            if (extras != null && !extras.isEmpty()) {
-                for (Map.Entry<String, StringProperty> entry : extras.entrySet()) {
-                    updatedEntries.add(new ArgEntry(
-                            rowIndex,
-                            step.getId(),
-                            entry.getKey(),
-                            entry.getValue(),
-                            false // manual
-                    ));
-                }
-            }
+            Label headerLabel = new Label();
+            headerLabel.textProperty().bind(
+                    Bindings.concat("Row ", currentRowIndex, ": ", step.objectProperty(), " → ", step.actionProperty())
+            );
+            headerLabel.getStyleClass().add("accordion-header");
 
-            // --- Add global extras (manager-linked) ---
-            Map<String, StringProperty> globals = step.getGlobalExtras();
-            if (globals != null && !globals.isEmpty()) {
-                for (Map.Entry<String, StringProperty> global : globals.entrySet()) {
-                    updatedEntries.add(new ArgEntry(
-                            rowIndex,
-                            step.getId(),
-                            global.getKey(),
-                            global.getValue(),
-                            true // global
-                    ));
-                }
-            }
+            // Build initial args (adds entries + UI)
+            buildArgBox(step, currentRowIndex, updatedEntries, argBox, true);
 
-            rowIndex++; // ✅ increment only after processing a real step
+            // Rebuild UI only when Object/Action changes
+            step.objectProperty().addListener((obs, oldVal, newVal) -> {
+                argBox.getChildren().clear();
+                buildArgBox(step, currentRowIndex, updatedEntries, argBox, false);
+            });
+            step.actionProperty().addListener((obs, oldVal, newVal) -> {
+                argBox.getChildren().clear();
+                buildArgBox(step, currentRowIndex, updatedEntries, argBox, false);
+            });
+
+            TitledPane pane = new TitledPane();
+            pane.setGraphic(headerLabel);
+            pane.setContent(argBox);
+
+            accordion.getPanes().add(pane);
+            rowIndex++;
         }
 
-        // --- Replace list entirely ---
         items.setAll(updatedEntries);
+        resolvedVariablePane.setContent(accordion);
 
-        log.info("ResolvedVariableList refreshed with " + items.size() + " entries (headers + extras + globals).");
+        log.info("ResolvedVariableList refreshed with " + updatedEntries.size() + " entries.");
     }
+
+
+
+    private void buildArgBox(TestStep step, int rowIndex, List<ArgEntry> updatedEntries, VBox argBox, boolean addEntries) {
+        List<String> expectedArgs = ArgRegistry.getArgsForAction(step.getAction());
+        Set<String> expectedSet = expectedArgs != null ? new HashSet<>(expectedArgs) : Collections.emptySet();
+
+        if (expectedArgs != null) {
+            for (String arg : expectedArgs) {
+                StringProperty prop = step.getExtraProperty(arg);
+                if (prop == null) {
+                    prop = new SimpleStringProperty("");
+                    step.getExtras().put(arg, prop);
+                }
+
+                if (addEntries) {
+                    updatedEntries.add(new ArgEntry(rowIndex, step.getId(), arg, prop, false));
+                }
+
+                Label argLabel = new Label(arg + ":");
+                argLabel.getStyleClass().add("arg-caption");
+
+                TextField argField = new TextField();
+                argField.textProperty().bindBidirectional(prop);
+                argField.getStyleClass().add("arg-text-field");
+                argField.setAlignment(Pos.CENTER_LEFT);
+                argField.setPrefWidth(220);
+
+                HBox row = new HBox(12, argLabel, argField);
+                row.setAlignment(Pos.CENTER_LEFT);
+                row.getStyleClass().add("expected-arg-row");
+                argBox.getChildren().add(row);
+            }
+        }
+
+        // Extras and globals handled the same way:
+        // only add to updatedEntries if addEntries == true
+    }
+
+
 
     // Helper to find existing ArgEntry
     private ArgEntry findExisting(List<ArgEntry> items, int rowIndex, String stepId, String name) {
