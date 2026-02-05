@@ -18,6 +18,7 @@ import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
 import javafx.geometry.Pos;
 import javafx.geometry.Side;
+import javafx.scene.Node;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
@@ -141,6 +142,7 @@ public class MainController {
     @FXML
     private TextArea lastPayloadArea;
     @FXML private TitledPane resolvedVariablePane;
+
     @FXML private ListView<ArgEntry> resolvedVariableList;
 
 
@@ -504,10 +506,16 @@ public class MainController {
             }
 
             if (newItem != null && newItem.getValue().getType() == NodeType.TEST_SCENARIO) {
-                loadScenario(newItem.getValue().getScenarioRef(), newItem);
+                TestScenario scenario = newItem.getValue().getScenarioRef();
+                loadScenario(scenario, newItem);
+
+                // ✅ Enforce selection + refresh
+                enforceSelectionAndRefresh(null);
             }
         });
     }
+
+
 
     private void commitScenario(TestScenario scenario) {
         if (scenario == null) return;
@@ -551,24 +559,38 @@ public class MainController {
 
     private void loadScenario(TestScenario scenario, TreeItem<TestNode> treeItem) {
         if (scenario == null) return;
+
         ObservableList<TestStep> stepsCopy = FXCollections.observableArrayList(
                 scenario.getSteps().stream()
                         .map(s -> (s.getId() == null || s.getId().isBlank()) ? TestStep.deepCopy(s) : s)
                         .toList()
         );
+
         scenarioSteps.put(scenario.getId(), stepsCopy);
         tableView.setItems(stepsCopy);
 
-        // ✅ Refresh ListView args for the selected scenario
-        refreshResolvedVariableList();
+        // 🔥 Consolidated pipeline
+        syncUIWithSteps(stepsCopy, null);
 
-        // Reload global directory only (do not broadcast to steps)
+        // ✅ Force selection of first step if scenario already has steps
+        if (!stepsCopy.isEmpty()) {
+            tableView.getSelectionModel().select(0);
+            syncUIWithSteps(stepsCopy, stepsCopy.get(0));
+        }
+
+        // ✅ Listener: auto-select first step when user adds to an empty table
+        stepsCopy.addListener((ListChangeListener<TestStep>) change -> {
+            while (change.next()) {
+                if (change.wasAdded() && tableView.getItems().size() == change.getAddedSize()) {
+                    // First step added to previously empty table
+                    TestStep firstStep = change.getAddedSubList().get(0);
+                    tableView.getSelectionModel().select(firstStep);
+                    syncUIWithSteps(tableView.getItems(), firstStep);
+                }
+            }
+        });
+
         reloadGlobalArgs();
-
-        tableView.refresh();
-        if (!stepsCopy.isEmpty()) tableView.getSelectionModel().selectFirst();
-
-        adjustArgsColumnWidth();
         refreshScenarioUI(scenario);
 
         String timestamp = LocalDateTime.now().toString();
@@ -580,7 +602,6 @@ public class MainController {
 
         applyStepToggle(treeItem, scenario);
     }
-
 
 
 
@@ -638,34 +659,74 @@ public class MainController {
     private void setupTableView() {
         tableView.setEditable(true);
 
-        // --- Define column order ---
+        // --- Define fixed column order ---
         tableView.getColumns().setAll(
-                selectColumn,     // ✅ new checkbox column for multi-run
-                itemColumn,       // step numbering
-                objectColumn,     // object reference
-                actionColumn,     // action reference
-                typeColumn,       // classification
-                descriptionColumn,// editable description
-                statusColumn      // execution status
+                selectColumn,
+                itemColumn,
+                objectColumn,
+                actionColumn,
+                typeColumn,
+                descriptionColumn,
+                statusColumn
         );
 
-        // --- Initialize each column ---
-        setupSelectColumn();     // checkbox column
-        setupItemColumn();       // numbering
-        setupObjectColumn();     // object ComboBox
-        setupActionColumn();     // action ComboBox
-        setupTypeColumn();       // type styling
-        setupDescriptionColumn();// editable description
-        setupStatusColumn();     // PASS/FAIL styling
-        setupRowFactory();       // row styling + context menu
+        // --- Initialize each fixed column ---
+        setupSelectColumn();
+        setupItemColumn();
+        setupObjectColumn();
+        setupActionColumn();
+        setupTypeColumn();
+        setupDescriptionColumn();
+        setupStatusColumn();
+        setupRowFactory();
+
+        // --- Remove any existing arg columns before adding new ones ---
+        tableView.getColumns().removeIf(col ->
+                !(col == selectColumn || col == itemColumn || col == objectColumn ||
+                        col == actionColumn || col == typeColumn || col == descriptionColumn ||
+                        col == statusColumn));
+
+        // --- Add dynamic arg columns ---
+        List<String> allArgs = argsByAction.values().stream()
+                .flatMap(List::stream)
+                .distinct()
+                .toList();
+
+        for (String argName : allArgs) {
+            TableColumn<TestStep, String> argCol = new TableColumn<>(argName);
+
+            argCol.setCellValueFactory(cellData -> {
+                TestStep step = cellData.getValue();
+                if (step.getExtras() != null && step.getExtras().containsKey(argName)) {
+                    return step.getExtras().get(argName); // bound StringProperty
+                }
+                return new SimpleStringProperty("");
+            });
+
+            argCol.setCellFactory(TextFieldTableCell.forTableColumn());
+            argCol.setOnEditCommit(event -> {
+                TestStep step = event.getRowValue();
+                if (step.getExtras() != null && step.getExtras().containsKey(argName)) {
+                    step.getExtras().get(argName).set(event.getNewValue());
+                    tableDirty = true;
+
+                    // ✅ Enforce selection + refresh for consistency
+                    enforceSelectionAndRefresh(step);
+                }
+            });
+
+            tableView.getColumns().add(argCol);
+        }
 
         // --- Refresh ListView when step selection changes ---
         tableView.getSelectionModel().selectedItemProperty().addListener((obs, oldStep, newStep) -> {
             if (newStep != null) {
-                refreshResolvedVariableList();
+                // 🔥 Centralized pipeline + enforced selection
+                enforceSelectionAndRefresh(newStep);
             }
         });
     }
+
 
 
 
@@ -685,19 +746,116 @@ public class MainController {
         });
     }
 
-    // --- Object column → ComboBox with auto‑assign + refresh ---
+    // --- Object column → editable ComboBox with enforced pipeline ---
     private void setupObjectColumn() {
         objectColumn.setCellValueFactory(new PropertyValueFactory<>("object"));
         objectColumn.setEditable(true);
-        objectColumn.setCellFactory(col -> buildObjectComboCell()); // your helper
+        objectColumn.setCellFactory(col -> buildObjectComboCell());
+
+        objectColumn.setOnEditCommit(event -> {
+            TestStep step = event.getRowValue();
+            step.setObject(event.getNewValue());
+
+            List<String> actions = actionsByObject.getOrDefault(step.getObject(), List.of());
+            if (actions.isEmpty()) {
+                step.setAction(null);
+            } else if (!actions.contains(step.getAction())) {
+                step.setAction(actions.get(0));
+            }
+
+            log.info(() -> String.format("[OBJECT CHANGE] Row=%d → %s (action=%s)",
+                    tableView.getItems().indexOf(step),
+                    step.getObject(),
+                    step.getAction()));
+
+            // Trigger row refresh → RowFactory will handle rebuild
+            tableView.refresh();
+        });
     }
 
-    // --- Action column → ComboBox with auto‑assign + refresh ---
+
     private void setupActionColumn() {
         actionColumn.setCellValueFactory(new PropertyValueFactory<>("action"));
         actionColumn.setEditable(true);
-        actionColumn.setCellFactory(col -> buildActionComboCell()); // your helper
+        actionColumn.setCellFactory(col -> buildActionComboCell());
+
+        actionColumn.setOnEditCommit(event -> {
+            TestStep step = event.getRowValue();
+            step.setAction(event.getNewValue());
+
+            log.info(() -> String.format("[ACTION CHANGE] Row=%d → %s",
+                    tableView.getItems().indexOf(step),
+                    step.getAction()));
+
+            // Trigger row refresh → RowFactory will handle rebuild
+            tableView.refresh();
+        });
     }
+
+
+    private void applyStepUpdate(TestStep step, int rowIndex) {
+        // Always rebuild args for current object/action
+        rebuildArgsForStep(step);
+
+        // Refresh resolved variables
+        refreshResolvedVariableList();
+
+        log.info(() -> String.format(
+                "[STEP UPDATE] Row=%d, id=%s, object=%s, action=%s, args=%s",
+                rowIndex,
+                step.getId(),
+                step.getObject(),
+                step.getAction(),
+                step.getExtras().keySet()
+        ));
+    }
+
+
+
+
+    /**
+     * Rebuilds the extras (args) for a step based on its current action.
+     * Preserves existing values and merges with new ones to avoid schema drift.
+     */
+    private void rebuildArgsForStep(TestStep step) {
+        if (step == null || step.getAction() == null) {
+            step.setExtras(new LinkedHashMap<>());
+            return;
+        }
+
+        List<String> args = ArgRegistry.getArgsForAction(step.getAction());
+        Map<String, StringProperty> newExtras = new LinkedHashMap<>();
+
+        // Build expected args
+        if (args != null) {
+            for (String argName : args) {
+                StringProperty existing = step.getExtras() != null ? step.getExtras().get(argName) : null;
+                newExtras.put(argName, existing != null ? existing : new SimpleStringProperty(""));
+            }
+        }
+
+        // Merge leftover extras (manual/global) so they don’t vanish
+        if (step.getExtras() != null) {
+            for (Map.Entry<String, StringProperty> entry : step.getExtras().entrySet()) {
+                if (!newExtras.containsKey(entry.getKey())) {
+                    newExtras.put(entry.getKey(), entry.getValue());
+                }
+            }
+        }
+
+        step.setExtras(newExtras);
+
+        // Row-indexed logging for traceability
+        int rowIndex = tableView.getItems().indexOf(step) + 1;
+        log.info(() -> String.format(
+                "[ARGS REBUILT] row=%d, stepId=%s, action=%s, args=%s",
+                rowIndex,
+                step.getId(),
+                step.getAction(),
+                newExtras.keySet()
+        ));
+    }
+
 
     // --- Type column → classification, read‑only ---
     private void setupTypeColumn() {
@@ -801,56 +959,52 @@ public class MainController {
                         setGraphic(null);
                         setContextMenu(null);
                     } else {
-                        // ✅ Ensure UUID is assigned immediately
-                        TestStep effectiveStep = step;
-                        if (effectiveStep.getId() == null || effectiveStep.getId().isBlank()) {
-                            effectiveStep = TestStep.deepCopy(effectiveStep);
-                            tableView.getItems().set(getIndex(), effectiveStep);
-                        }
+                        // 🔥 Centralized rebuild + refresh
+                        applyStepUpdate(step, getIndex());
 
-                        // --- Existing status styling ---
-                        if (effectiveStep.isNew()) {
+                        // --- Status styling ---
+                        String status = step.getStatus();
+                        if (step.isNew()) {
                             setStyle("-fx-background-color: #d6f5ff; -fx-font-weight: bold;");
+                        } else if ("PASS".equalsIgnoreCase(status)) {
+                            setStyle("-fx-background-color: #e6ffe6; -fx-text-fill: green; -fx-font-weight: bold;");
+                        } else if ("FAIL".equalsIgnoreCase(status)) {
+                            setStyle("-fx-background-color: #ffe6e6; -fx-text-fill: red; -fx-font-weight: bold;");
+                        } else if (status == null || status.isBlank() || "PENDING".equalsIgnoreCase(status)) {
+                            setStyle("-fx-background-color: #f2f2f2; -fx-text-fill: gray; -fx-font-style: italic;");
                         } else {
-                            String status = effectiveStep.getStatus();
-                            if ("PASS".equalsIgnoreCase(status)) {
-                                setStyle("-fx-background-color: #e6ffe6; -fx-text-fill: green; -fx-font-weight: bold;");
-                            } else if ("FAIL".equalsIgnoreCase(status)) {
-                                setStyle("-fx-background-color: #ffe6e6; -fx-text-fill: red; -fx-font-weight: bold;");
-                            } else if (status == null || status.isBlank() || "PENDING".equalsIgnoreCase(status)) {
-                                setStyle("-fx-background-color: #f2f2f2; -fx-text-fill: gray; -fx-font-style: italic;");
-                            } else {
-                                setStyle("-fx-background-color: #fff5e6; -fx-text-fill: orange; -fx-font-weight: bold;");
-                            }
+                            setStyle("-fx-background-color: #fff5e6; -fx-text-fill: orange; -fx-font-weight: bold;");
                         }
 
                         // --- Context menu for right‑click ---
                         ContextMenu menu = new ContextMenu();
                         MenuItem runItem = new MenuItem("Run Step");
-                        TestStep finalStep = effectiveStep; // ✅ final for lambda
                         runItem.setOnAction(e -> {
-                            tableView.getSelectionModel().select(finalStep); // ensure selection
-                            handleRun(new ActionEvent());                     // reuse your existing run logic
+                            tableView.getSelectionModel().select(step);
+                            handleRun(new ActionEvent());
                         });
                         menu.getItems().add(runItem);
-
                         setContextMenu(menu);
                     }
                 }
             };
 
-            // Left‑click still selects row
+            // --- Mouse click handling ---
             row.setOnMouseClicked(event -> {
                 if (!row.isEmpty()) {
-                    tableView.getSelectionModel().select(row.getItem());
+                    TestStep step = row.getItem();
+                    tableView.getSelectionModel().select(step);
+
+                    if (event.getClickCount() == 2 && event.getButton() == MouseButton.PRIMARY) {
+                        // Double‑click → force rebuild + refresh
+                        applyStepUpdate(step, row.getIndex());
+                    }
                 }
             });
 
             return row;
         });
     }
-
-
 
 
     @FXML
@@ -2332,15 +2486,56 @@ public class MainController {
 
 
 
+    // --- Helper: auto-adjust width of dynamic arg columns + sync args list ---
+    // --- Helper: auto-adjust width of dynamic arg columns + sync args list ---
     private void adjustArgsColumnWidth() {
+        // --- Resize dynamic arg columns in TableView ---
         for (TableColumn<TestStep, ?> col : tableView.getColumns()) {
             if ("Dynamic".equals(col.getUserData())) {
-                // You can calculate width dynamically based on header text length:
-                double width = Math.max(80, col.getText().length() * 10);
-                col.setPrefWidth(width);
+                // Measure header width
+                double headerWidth = (col.getText() != null ? col.getText().length() * 8 : 80);
+
+                // Measure max content length across all rows
+                int maxLen = 0;
+                for (TestStep step : tableView.getItems()) {
+                    Object value = col.getCellObservableValue(step).getValue();
+                    if (value != null) {
+                        maxLen = Math.max(maxLen, value.toString().length());
+                    }
+                }
+
+                // Approximate width: max(header, content) + padding
+                double contentWidth = maxLen * 7; // ~7px per char
+                double newWidth = Math.max(headerWidth, contentWidth) + 20;
+                col.setPrefWidth(newWidth);
             }
         }
+
+        // --- Sync args ListView (resolvedVariableList) ---
+        if (resolvedVariableList != null) {
+            resolvedVariableList.setCellFactory(list -> new ListCell<ArgEntry>() {
+                @Override
+                protected void updateItem(ArgEntry entry, boolean empty) {
+                    super.updateItem(entry, empty);
+                    if (empty || entry == null) {
+                        setText(null);
+                    } else {
+                        // Show "argName = value" clearly
+                        String display = entry.getName() + " = " +
+                                (entry.valueProperty() != null ? entry.valueProperty().get() : "");
+                        setText(display);
+
+                        // Auto-size cell width based on content
+                        double width = Math.max(120, display.length() * 7);
+                        setPrefWidth(width);
+                    }
+                }
+            });
+        }
     }
+
+
+
 
 
     // Helper to avoid nulls in file output
@@ -2601,9 +2796,8 @@ public class MainController {
                 : List.of();
     }
 
-
     private void syncScenarioToContext(TestScenario scenario) {
-        List<ArgEntry> argEntries = new ArrayList<>();
+        ObservableList<ArgEntry> items = FXCollections.observableArrayList();
         int rowIndex = 1;
 
         for (TestStep step : tableView.getItems()) {
@@ -2634,28 +2828,30 @@ public class MainController {
                 }
             }
 
-            // Header
-            argEntries.add(new ArgEntry(rowIndex, step.getId(),
-                    "Row " + rowIndex + ": " + action));
+            // Header entry
+            items.add(new ArgEntry(rowIndex, step.getId(),
+                    "Row " + rowIndex + ": " + step.getObject() + " → " + action));
 
-            // Arguments
+            // Argument entries
             for (String arg : args) {
                 if (globals.containsKey(arg)) {
-                    argEntries.add(new ArgEntry(rowIndex, step.getId(), arg, globals.get(arg)));
+                    items.add(new ArgEntry(rowIndex, step.getId(), arg, globals.get(arg), true));
                 } else if (extras.containsKey(arg)) {
-                    argEntries.add(new ArgEntry(rowIndex, step.getId(), arg, extras.get(arg)));
+                    items.add(new ArgEntry(rowIndex, step.getId(), arg, extras.get(arg)));
                 }
             }
 
             rowIndex++;
         }
 
-        resolvedVariableList.setItems(FXCollections.observableArrayList(argEntries));
+        resolvedVariableList.setItems(items);
         resolvedVariableList.setPlaceholder(new Label("No arguments discovered"));
 
         // Cell factory
         resolvedVariableList.setCellFactory(listView -> new ListCell<>() {
+            private final Label argLabel = new Label();
             private final TextField textField = new TextField();
+            private final HBox argBox = new HBox(8, argLabel, textField);
 
             @Override
             protected void updateItem(ArgEntry entry, boolean empty) {
@@ -2664,19 +2860,29 @@ public class MainController {
                 if (empty || entry == null) {
                     setText(null);
                     setGraphic(null);
-                } else if (entry.isHeader()) {
+                    return;
+                }
+
+                if (entry.isHeader()) {
                     setText(entry.getName());
                     setStyle("-fx-font-weight: bold; -fx-text-fill: #1a73e8;");
                     setGraphic(null);
                 } else {
                     textField.textProperty().unbind();
                     textField.textProperty().bindBidirectional(entry.valueProperty());
-                    textField.setPromptText(entry.getName());
-                    setGraphic(textField);
+
+                    argLabel.setText(entry.getName() + ":");
+                    textField.setPromptText(entry.isGlobal() ? "[GLOBAL] " + entry.getName() : entry.getName());
+
+                    argBox.setAlignment(Pos.CENTER_LEFT);
+                    setGraphic(argBox);
                     setText(null);
                 }
             }
         });
+
+
+
     }
 
 
@@ -3266,7 +3472,7 @@ public class MainController {
                             scenarioSteps.getOrDefault(scenario.getId(), scenario.getSteps());
 
                     for (TestStep step : stepsToSave) {
-                        dto.getChildren().add(toStepDTO(step));
+                        dto.getChildren().add(NodeDTOConverter.fromStep(step)); // use converter
                     }
                 }
             }
@@ -3274,14 +3480,25 @@ public class MainController {
             case TEST_STEP -> {
                 TestStep step = node.getStepRef();
                 if (step != null) {
-                    // ✅ Simplified: just return the stepDTO directly
-                    return toStepDTO(step);
+                    // ✅ Populate dto with step fields via converter
+                    NodeDTO stepDTO = NodeDTOConverter.fromStep(step);
+
+                    dto.setItem(stepDTO.getItem());
+                    dto.setAction(stepDTO.getAction());
+                    dto.setObject(stepDTO.getObject());
+                    dto.setInput(stepDTO.getInput());
+                    dto.setDescription(stepDTO.getDescription());
+                    dto.setStepType(stepDTO.getStepType());
+                    dto.setStepStatus(stepDTO.getStepStatus());
+                    dto.setStepExtras(stepDTO.getStepExtras());
+                    dto.setStepGlobals(stepDTO.getStepGlobals());
                 }
             }
         }
 
         return dto;
     }
+
 
 
     /**
@@ -3317,7 +3534,7 @@ public class MainController {
     private TreeItem<TestNode> fromDTO(NodeDTO dto) {
         if (dto == null) return null;
 
-        // --- Create base TestNode ---
+        // --- Create base TestNode using the constructor with ID ---
         TestNode node = new TestNode(dto.getId(), dto.getName(), dto.getType());
         node.setName(dto.getName()); // ensure bound property is updated
 
@@ -3339,15 +3556,17 @@ public class MainController {
                     dto.getScenarioExtras().forEach((k, v) ->
                             extrasMap.put(k, new SimpleStringProperty(v))
                     );
-                    scenario.setExtras(extrasMap); // ✅ live properties
+                    scenario.setExtras(extrasMap); // live properties
                 }
 
                 // --- Restore steps ---
                 ObservableList<TestStep> restoredSteps = FXCollections.observableArrayList();
                 if (dto.getChildren() != null) {
                     for (NodeDTO stepDTO : dto.getChildren()) {
-                        TestStep step = restoreStep(stepDTO); // ✅ builds StringProperty maps
-                        restoredSteps.add(step);
+                        if (stepDTO.getType() == NodeType.TEST_STEP) {
+                            TestStep step = NodeDTOConverter.toStep(stepDTO); // use converter
+                            restoredSteps.add(step);
+                        }
                     }
                 }
 
@@ -3357,17 +3576,21 @@ public class MainController {
             }
 
             case TEST_STEP -> {
-                TestStep step = restoreStep(dto); // ✅ builds StringProperty maps
+                TestStep step = NodeDTOConverter.toStep(dto); // use converter
                 node.setStepRef(step);
             }
 
+            case ROOT -> {
+                // Root node, no extra refs
+            }
+
             default -> {
-                // ROOT or other types handled below
+                // Other types if any
             }
         }
 
         // --- Build tree item ---
-        TreeItem<TestNode> item = buildTreeItem(node);
+        TreeItem<TestNode> item = new TreeItem<>(node);
 
         // --- Recursively restore children for container nodes ---
         if (dto.getChildren() != null &&
@@ -3381,6 +3604,8 @@ public class MainController {
 
         return item;
     }
+
+
 
 
 
@@ -3529,9 +3754,6 @@ public class MainController {
             restoredRoot.setExpanded(true);
             treeView.setRoot(restoredRoot);
 
-            // --- Refresh ListView from restored step maps ---
-            refreshResolvedVariableList();
-
             // Track which file is active for saving later
             currentProjectFile = file;
 
@@ -3542,6 +3764,7 @@ public class MainController {
             log.severe("Failed to load project: " + e.getMessage());
         }
     }
+
 
 
 
@@ -3859,137 +4082,81 @@ public class MainController {
 
 
     private void setupResolvedVariableList() {
-        // Build scenario directly from tableView
-        ObservableList<TestStep> steps = tableView.getItems();
+        resolvedVariableList.setEditable(true);
+        resolvedVariableList.setPlaceholder(new Label("No arguments discovered"));
 
-        Accordion accordion = new Accordion();
-        int rowIndex = 1;
-
-        for (TestStep step : steps) {
-            if (step == null || step.getAction() == null || step.getAction().isBlank()) {
-                rowIndex++;
-                continue;
-            }
-
-            // --- Header: ActionName ---
-            String headerTitle = "Row " + rowIndex + ": " + step.getAction();
-            VBox argBox = new VBox(6);
-
-            // --- Expected args ---
-            List<String> expectedArgs = ArgRegistry.getArgsForAction(step.getAction());
-            if (expectedArgs != null) {
-                for (String arg : expectedArgs) {
-                    final String argName = arg;
-                    final int currentRow = rowIndex;
-
-                    StringProperty prop = step.getExtraProperty(argName);
-                    if (prop == null) {
-                        prop = new SimpleStringProperty("");
-                        step.getExtras().put(argName, prop);
-                    }
-
-                    Label argLabel = new Label(argName + ":");
-                    TextField argField = new TextField();
-                    argField.textProperty().bindBidirectional(prop);
-
-                    // Persist manual edits
-                    argField.textProperty().addListener((obs, oldVal, newVal) -> {
-                        if (newVal != null && !newVal.equals(oldVal)) {
-                            step.setExtra(argName, newVal);
-                            logExecutionEvent("ARG", String.format(
-                                    "row=%d, stepId=%s, arg=%s (manual value=%s)",
-                                    currentRow,
-                                    step.getId(),
-                                    argName,
-                                    newVal
-                            ));
-                        }
-                    });
-
-                    // Ctrl+Space → global binding
-                    argField.addEventFilter(KeyEvent.KEY_PRESSED, event -> {
-                        if (event.isControlDown() && event.getCode() == KeyCode.SPACE) {
-                            event.consume();
-                            ContextMenu suggestions = new ContextMenu();
-                            GlobalArgsManager.getStepArgsSnapshot().forEach(globalArg -> {
-                                String label = "{" + globalArg.getFieldName() + ":" + globalArg.getValue() + "}";
-                                MenuItem item = new MenuItem(label);
-
-                                item.setOnAction(e -> {
-                                    StringProperty globalProp = GlobalArgsManager.getGlobalArgs().get(globalArg.getFieldName());
-                                    if (globalProp != null) {
-                                        step.promoteToGlobal(argName, globalProp);
-                                        argField.textProperty().unbind();
-                                        argField.textProperty().bindBidirectional(globalProp);
-
-                                        logExecutionEvent("ARG", String.format(
-                                                "row=%d, stepId=%s, arg=%s (bound to global %s)",
-                                                currentRow,
-                                                step.getId(),
-                                                argName,
-                                                globalArg.getFieldName()
-                                        ));
-                                    }
-                                    suggestions.hide();
-                                });
-
-                                suggestions.getItems().add(item);
-                            });
-                            suggestions.show(argField, Side.BOTTOM, 0, 0);
-                        }
-                    });
-
-                    HBox row = new HBox(8, argLabel, argField);
-                    row.setStyle("-fx-padding: 0 0 0 20;");
-                    argBox.getChildren().add(row);
-                }
-            }
-
-            // --- Global args ---
-            Map<String, StringProperty> globals = step.getGlobalExtras();
-            if (globals != null) {
-                for (Map.Entry<String, StringProperty> global : globals.entrySet()) {
-                    final String globalKey = global.getKey();
-                    final int currentRow = rowIndex;
-
-                    Label argLabel = new Label(globalKey + ":");
-                    TextField argField = new TextField();
-                    argField.textProperty().bindBidirectional(global.getValue());
-                    argField.setStyle("-fx-text-fill: blue; -fx-font-weight: bold;");
-                    argField.setPromptText("[GLOBAL] " + globalKey);
-
-                    // Detect manual override
-                    argField.textProperty().addListener((obs, oldVal, newVal) -> {
-                        if (newVal != null && !newVal.equals(oldVal)) {
-                            step.demoteToExtra(globalKey, newVal);
-                            argField.textProperty().unbind();
-                            argField.textProperty().bindBidirectional(step.getExtraProperty(globalKey));
-
-                            logExecutionEvent("ARG", String.format(
-                                    "row=%d, stepId=%s, arg=%s (demoted to manual value=%s)",
-                                    currentRow,
-                                    step.getId(),
-                                    globalKey,
-                                    newVal
-                            ));
-                        }
-                    });
-
-                    HBox row = new HBox(8, argLabel, argField);
-                    row.setStyle("-fx-padding: 0 0 0 20;");
-                    argBox.getChildren().add(row);
-                }
-            }
-
-            // --- Add pane per step ---
-            TitledPane pane = new TitledPane(headerTitle, argBox);
-            accordion.getPanes().add(pane);
-            rowIndex++;
-        }
-
-        // Replace ListView with Accordion inside the TitledPane
-        resolvedVariablePane.setContent(accordion);
+        // ✅ Only structural setup here
+        resolvedVariableList.getSelectionModel().setSelectionMode(SelectionMode.SINGLE);
     }
+
+
+    // --- Show global args popup (Ctrl+Space) ---
+    private void showGlobalArgsPopup() {
+        ContextMenu suggestions = new ContextMenu();
+
+        GlobalArgsManager.getStepArgsSnapshot().forEach(arg -> {
+            String label = "{" + arg.getFieldName() + ":" + arg.getValue() + "}";
+            MenuItem item = new MenuItem(label);
+
+            item.setOnAction(e -> {
+                TestStep step = tableView.getSelectionModel().getSelectedItem();
+                ArgEntry entry = resolvedVariableList.getSelectionModel().getSelectedItem();
+
+                if (step != null && entry != null && !entry.isHeader()) {
+                    StringProperty globalProp = GlobalArgsManager.getGlobalArgs().get(arg.getFieldName());
+                    if (globalProp != null) {
+                        step.promoteToGlobal(entry.getName(), globalProp);
+
+                        if (entry.valueProperty() != globalProp) {
+                            entry.valueProperty().unbind();
+                            entry.valueProperty().bindBidirectional(globalProp);
+                        }
+
+                        // 🔥 Use centralized pipeline instead of direct refresh
+                        syncUIWithSteps(tableView.getItems(), step);
+                        suggestions.hide();
+
+                        logExecutionEvent("ARG", String.format(
+                                "row=%d, stepId=%s, arg=%s (bound to global %s)",
+                                entry.getRowIndex(),
+                                entry.getStepId(),
+                                entry.getName(),
+                                arg.getFieldName()
+                        ));
+                    }
+                }
+            });
+
+            suggestions.getItems().add(item);
+        });
+
+        suggestions.show(resolvedVariableList, Side.BOTTOM, 0, 0);
+    }
+
+
+    // --- Copy selected arg (Ctrl+C) ---
+    private void copySelectedArg() {
+        ArgEntry entry = resolvedVariableList.getSelectionModel().getSelectedItem();
+        if (entry != null && !entry.isHeader()) {
+            ClipboardContent content = new ClipboardContent();
+            content.putString(entry.valueProperty().get());
+            Clipboard.getSystemClipboard().setContent(content);
+            logExecutionEvent("COPY", "Copied arg value: " + entry.getName());
+        }
+    }
+
+    // --- Paste into selected arg (Ctrl+V) ---
+    private void pasteIntoSelectedArg() {
+        ArgEntry entry = resolvedVariableList.getSelectionModel().getSelectedItem();
+        if (entry != null && !entry.isHeader()) {
+            String paste = Clipboard.getSystemClipboard().getString();
+            if (paste != null) {
+                entry.valueProperty().set(paste);
+                logExecutionEvent("PASTE", "Pasted arg value into: " + entry.getName());
+            }
+        }
+    }
+
 
 
 
@@ -4068,12 +4235,10 @@ public class MainController {
     }
 
     private void setupStepListeners() {
-        // Attach listeners for existing steps
         for (TestStep step : tableView.getItems()) {
             attachStepListeners(step);
         }
 
-        // Attach listeners for any new steps added later
         tableView.getItems().addListener((ListChangeListener<TestStep>) change -> {
             while (change.next()) {
                 if (change.wasAdded()) {
@@ -4086,19 +4251,13 @@ public class MainController {
     }
 
     private void attachStepListeners(TestStep step) {
-        step.objectProperty().addListener((obs, oldVal, newVal) -> refreshResolvedVariableList());
-        step.actionProperty().addListener((obs, oldVal, newVal) -> refreshResolvedVariableList());
+        step.objectProperty().addListener((obs, oldVal, newVal) -> syncUIWithSteps(tableView.getItems(), step));
+        step.actionProperty().addListener((obs, oldVal, newVal) -> syncUIWithSteps(tableView.getItems(), step));
     }
 
-    private void refreshResolvedVariableList() {
-        ObservableList<ArgEntry> items = resolvedVariableList.getItems();
-        if (items == null) {
-            items = FXCollections.observableArrayList();
-            resolvedVariableList.setItems(items);
-        }
 
-        List<ArgEntry> updatedEntries = new ArrayList<>();
-        Accordion accordion = new Accordion();
+    private void refreshResolvedVariableList() {
+        ObservableList<ArgEntry> items = FXCollections.observableArrayList();
         int rowIndex = 1;
 
         for (TestStep step : tableView.getItems()) {
@@ -4107,48 +4266,82 @@ public class MainController {
                 continue;
             }
 
-            final int currentRowIndex = rowIndex;
-            final VBox argBox = new VBox(8);
-            argBox.setAlignment(Pos.TOP_LEFT);
+            // Header entry for this row
+            items.add(new ArgEntry(rowIndex, step.getId(),
+                    "Row " + rowIndex + ": " + step.getObject() + " → " + step.getAction()));
 
-            Label headerLabel = new Label();
-            headerLabel.textProperty().bind(
-                    Bindings.concat("Row ", currentRowIndex, ": ", step.objectProperty(), " → ", step.actionProperty())
-            );
-            headerLabel.getStyleClass().add("accordion-header");
-
-            // Build initial args (adds entries + UI)
-            buildArgBox(step, currentRowIndex, updatedEntries, argBox, true);
-
-            // Rebuild UI only when Object/Action changes
-            step.objectProperty().addListener((obs, oldVal, newVal) -> {
-                argBox.getChildren().clear();
-                buildArgBox(step, currentRowIndex, updatedEntries, argBox, false);
-            });
-            step.actionProperty().addListener((obs, oldVal, newVal) -> {
-                argBox.getChildren().clear();
-                buildArgBox(step, currentRowIndex, updatedEntries, argBox, false);
-            });
-
-            TitledPane pane = new TitledPane();
-            pane.setGraphic(headerLabel);
-            pane.setContent(argBox);
-
-            accordion.getPanes().add(pane);
+            buildArgEntries(step, rowIndex, items);
             rowIndex++;
         }
 
-        items.setAll(updatedEntries);
-        resolvedVariablePane.setContent(accordion);
+        resolvedVariableList.setItems(items);
 
-        log.info("ResolvedVariableList refreshed with " + updatedEntries.size() + " entries.");
+        // ✅ Unified cell factory with styling + handlers
+        resolvedVariableList.setCellFactory(list -> new ListCell<>() {
+            private final Label argLabel = new Label();
+            private final TextField textField = new TextField();
+            private final HBox argBox = new HBox(8, argLabel, textField);
+
+            @Override
+            protected void updateItem(ArgEntry entry, boolean empty) {
+                super.updateItem(entry, empty);
+
+                if (empty || entry == null) {
+                    setText(null);
+                    setGraphic(null);
+                    setStyle(""); // clear style when empty
+                    return;
+                }
+
+                if (entry.isHeader()) {
+                    setText(entry.getDisplayText());
+                    setGraphic(null);
+                    setStyle("-fx-text-fill: blue; -fx-font-weight: bold;");
+                } else {
+                    textField.textProperty().unbind();
+                    if (entry.valueProperty() != null) {
+                        textField.textProperty().bindBidirectional(entry.valueProperty());
+                    }
+                    argLabel.setText(entry.getName() + ":");
+                    textField.setPromptText(entry.isGlobal() ? "[GLOBAL]" : "");
+                    argBox.setAlignment(Pos.CENTER_LEFT);
+                    setGraphic(argBox);
+                    setText(null);
+
+                    // 🔥 Apply style for globals vs. normal args
+                    if (entry.isGlobal()) {
+                        setStyle("-fx-text-fill: green; -fx-font-style: italic;");
+                    } else {
+                        setStyle("-fx-text-fill: #ddd;");
+                    }
+
+                    // --- Handlers re‑added here ---
+                    textField.addEventFilter(KeyEvent.KEY_PRESSED, event -> {
+                        if (event.isControlDown() && event.getCode() == KeyCode.SPACE) {
+                            showGlobalArgsPopup();
+                            event.consume();
+                        }
+                        if (event.isControlDown() && event.getCode() == KeyCode.C) {
+                            copySelectedArg();
+                            event.consume();
+                        }
+                        if (event.isControlDown() && event.getCode() == KeyCode.V) {
+                            pasteIntoSelectedArg();
+                            event.consume();
+                        }
+                    });
+                }
+            }
+        });
+
+        resolvedVariableList.refresh();
+        log.info("ResolvedVariableList refreshed with " + items.size() + " entries.");
     }
 
 
 
-    private void buildArgBox(TestStep step, int rowIndex, List<ArgEntry> updatedEntries, VBox argBox, boolean addEntries) {
+    private void buildArgEntries(TestStep step, int rowIndex, List<ArgEntry> updatedEntries) {
         List<String> expectedArgs = ArgRegistry.getArgsForAction(step.getAction());
-        Set<String> expectedSet = expectedArgs != null ? new HashSet<>(expectedArgs) : Collections.emptySet();
 
         if (expectedArgs != null) {
             for (String arg : expectedArgs) {
@@ -4157,29 +4350,27 @@ public class MainController {
                     prop = new SimpleStringProperty("");
                     step.getExtras().put(arg, prop);
                 }
-
-                if (addEntries) {
-                    updatedEntries.add(new ArgEntry(rowIndex, step.getId(), arg, prop, false));
-                }
-
-                Label argLabel = new Label(arg + ":");
-                argLabel.getStyleClass().add("arg-caption");
-
-                TextField argField = new TextField();
-                argField.textProperty().bindBidirectional(prop);
-                argField.getStyleClass().add("arg-text-field");
-                argField.setAlignment(Pos.CENTER_LEFT);
-                argField.setPrefWidth(220);
-
-                HBox row = new HBox(12, argLabel, argField);
-                row.setAlignment(Pos.CENTER_LEFT);
-                row.getStyleClass().add("expected-arg-row");
-                argBox.getChildren().add(row);
+                updatedEntries.add(new ArgEntry(rowIndex, step.getId(), arg, prop));
             }
         }
 
-        // Extras and globals handled the same way:
-        // only add to updatedEntries if addEntries == true
+        // Extras
+        Map<String, StringProperty> extras = step.getExtras();
+        if (extras != null) {
+            for (Map.Entry<String, StringProperty> entry : extras.entrySet()) {
+                if (expectedArgs == null || !expectedArgs.contains(entry.getKey())) {
+                    updatedEntries.add(new ArgEntry(rowIndex, step.getId(), entry.getKey(), entry.getValue()));
+                }
+            }
+        }
+
+        // Globals
+        Map<String, StringProperty> globals = step.getGlobalExtras();
+        if (globals != null) {
+            for (Map.Entry<String, StringProperty> global : globals.entrySet()) {
+                updatedEntries.add(new ArgEntry(rowIndex, step.getId(), global.getKey(), global.getValue(), true));
+            }
+        }
     }
 
 
@@ -4263,6 +4454,55 @@ public class MainController {
             }
         }
     }
+
+
+    // --- One pipeline to sync everything ---
+    private void syncUIWithSteps(List<TestStep> steps, TestStep focusStep) {
+        if (steps == null) return;
+
+        // 🔥 Rebuild args for every step using centralized helper
+        for (TestStep step : steps) {
+            rebuildArgsForStep(step);
+        }
+
+        // 🔥 Force selection of focus step (or first step if null)
+        if (focusStep != null) {
+            tableView.getSelectionModel().select(focusStep);
+            tableView.scrollTo(focusStep);
+        } else if (!steps.isEmpty()) {
+            tableView.getSelectionModel().selectFirst();
+            tableView.scrollTo(0);
+        }
+
+        // Refresh UI
+        tableView.refresh();
+        adjustArgsColumnWidth();
+
+        // 🔥 Explicitly refresh ListView with centralized styling
+        refreshResolvedVariableList();
+
+        tableDirty = true;
+    }
+
+
+
+    /**
+     * Enforces selection and refresh so args fields always show.
+     * - If a specific step is provided, select it and run pipeline.
+     * - If no step is provided but table has rows, select first row and run pipeline.
+     */
+    private void enforceSelectionAndRefresh(TestStep step) {
+        if (step != null) {
+            tableView.getSelectionModel().select(step);
+            syncUIWithSteps(tableView.getItems(), step);
+        } else if (!tableView.getItems().isEmpty()) {
+            TestStep firstStep = tableView.getItems().get(0);
+            tableView.getSelectionModel().select(firstStep);
+            syncUIWithSteps(tableView.getItems(), firstStep);
+        }
+    }
+
+
 
 
 

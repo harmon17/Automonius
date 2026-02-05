@@ -76,20 +76,36 @@
                 <HBox spacing="6" alignment="CENTER" styleClass="group-b-box">
                     <children>
                         <Button onAction="#handleNewSuite" styleClass="rounded-addrow-btn">
-                            <graphic><FontIcon iconLiteral="mdi-folder-plus" iconSize="16"/></graphic>
-                            <tooltip><Tooltip text="New Suite"/></tooltip>
+                            <graphic>
+                                <FontIcon iconLiteral="mdi-folder-plus" iconSize="16"/>
+                            </graphic>
+                            <tooltip>
+                                <Tooltip text="New Suite"/>
+                            </tooltip>
                         </Button>
                         <Button onAction="#handleNewSubSuite" styleClass="rounded-addrow-btn">
-                            <graphic><FontIcon iconLiteral="mdi-folder-outline" iconSize="16"/></graphic>
-                            <tooltip><Tooltip text="New Sub-Suite"/></tooltip>
+                            <graphic>
+                                <FontIcon iconLiteral="mdi-folder-outline" iconSize="16"/>
+                            </graphic>
+                            <tooltip>
+                                <Tooltip text="New Sub-Suite"/>
+                            </tooltip>
                         </Button>
                         <Button onAction="#handleNewTestScenario" styleClass="rounded-addrow-btn">
-                            <graphic><FontIcon iconLiteral="mdi-file-outline" iconSize="16"/></graphic>
-                            <tooltip><Tooltip text="New Test Scenario"/></tooltip>
+                            <graphic>
+                                <FontIcon iconLiteral="mdi-file-outline" iconSize="16"/>
+                            </graphic>
+                            <tooltip>
+                                <Tooltip text="New Test Scenario"/>
+                            </tooltip>
                         </Button>
                         <Button onAction="#handleDelete" styleClass="rounded-addrow-btn">
-                            <graphic><FontIcon iconLiteral="mdi-delete" iconSize="16"/></graphic>
-                            <tooltip><Tooltip text="Delete"/></tooltip>
+                            <graphic>
+                                <FontIcon iconLiteral="mdi-delete" iconSize="16"/>
+                            </graphic>
+                            <tooltip>
+                                <Tooltip text="Delete"/>
+                            </tooltip>
                         </Button>
                     </children>
                 </HBox>
@@ -115,43 +131,71 @@
                         <HBox spacing="8" styleClass="group-a-box">
                             <children>
                                 <Button fx:id="runBtn" onAction="#handleRun" styleClass="rounded-action-btn">
-                                    <graphic><FontIcon iconLiteral="mdi-play-circle-outline" iconSize="18"/></graphic>
+                                    <graphic>
+                                        <FontIcon iconLiteral="mdi-play-circle-outline" iconSize="18"/>
+                                    </graphic>
                                 </Button>
                                 <Button fx:id="saveBtn" onAction="#handleSave" styleClass="rounded-action-btn">
-                                    <graphic><FontIcon iconLiteral="mdi-content-save" iconSize="18"/></graphic>
+                                    <graphic>
+                                        <FontIcon iconLiteral="mdi-content-save" iconSize="18"/>
+                                    </graphic>
                                 </Button>
                                 <Button fx:id="reportBtn" styleClass="rounded-action-btn">
-                                    <graphic><FontIcon iconLiteral="mdi-file-chart" iconSize="18"/></graphic>
+                                    <graphic>
+                                        <FontIcon iconLiteral="mdi-file-chart" iconSize="18"/>
+                                    </graphic>
                                 </Button>
                                 <Button fx:id="tagBtn" styleClass="rounded-action-btn">
-                                    <graphic><FontIcon iconLiteral="mdi-tag" iconSize="18"/></graphic>
+                                    <graphic>
+                                        <FontIcon iconLiteral="mdi-tag" iconSize="18"/>
+                                    </graphic>
                                 </Button>
                             </children>
                         </HBox>
-                        <Region><HBox.hgrow><Priority fx:constant="ALWAYS"/></HBox.hgrow></Region>
+                        <Region>
+                            <HBox.hgrow>
+                                <Priority fx:constant="ALWAYS"/>
+                            </HBox.hgrow>
+                        </Region>
                         <HBox spacing="8" styleClass="group-b-box">
                             <children>
                                 <Button fx:id="AddRow" onAction="#handleAddRow" styleClass="rounded-addrow-btn">
-                                    <graphic><FontIcon iconLiteral="mdi-plus" iconSize="16"/></graphic>
+                                    <graphic>
+                                        <FontIcon iconLiteral="mdi-plus" iconSize="16"/>
+                                    </graphic>
                                 </Button>
                                 <Button fx:id="DeleteRow" onAction="#handleDeleteRow" styleClass="rounded-addrow-btn">
-                                    <graphic><FontIcon iconLiteral="mdi-minus" iconSize="16"/></graphic>
+                                    <graphic>
+                                        <FontIcon iconLiteral="mdi-minus" iconSize="16"/>
+                                    </graphic>
                                 </Button>
                                 <Button fx:id="AddColumn" onAction="#handleAddColumn" styleClass="rounded-addrow-btn">
-                                    <graphic><FontIcon iconLiteral="mdi-table-column-plus-after" iconSize="16"/></graphic>
+                                    <graphic>
+                                        <FontIcon iconLiteral="mdi-table-column-plus-after" iconSize="16"/>
+                                    </graphic>
                                 </Button>
                                 <Button fx:id="DeleteColumn" styleClass="rounded-addrow-btn">
-                                    <graphic><FontIcon iconLiteral="mdi-table-column-remove" iconSize="16"/></graphic>
+                                    <graphic>
+                                        <FontIcon iconLiteral="mdi-table-column-remove" iconSize="16"/>
+                                    </graphic>
                                 </Button>
                                 <Button fx:id="MoveUp" onAction="#handleMoveUp" styleClass="rounded-addrow-btn">
-                                    <graphic><FontIcon iconLiteral="mdi-arrow-up" iconSize="16"/></graphic>
+                                    <graphic>
+                                        <FontIcon iconLiteral="mdi-arrow-up" iconSize="16"/>
+                                    </graphic>
                                 </Button>
                                 <Button fx:id="MoveDown" onAction="#handleMoveDown" styleClass="rounded-addrow-btn">
-                                    <graphic><FontIcon iconLiteral="mdi-arrow-down" iconSize="16"/></graphic>
+                                    <graphic>
+                                        <FontIcon iconLiteral="mdi-arrow-down" iconSize="16"/>
+                                    </graphic>
                                 </Button>
                                 <Button fx:id="refreshBtn" onAction="#handleRefresh" styleClass="rounded-addrow-btn">
-                                    <graphic><FontIcon iconLiteral="mdi-refresh" iconSize="16"/></graphic>
-                                    <tooltip><Tooltip text="Refresh TableView"/></tooltip>
+                                    <graphic>
+                                        <FontIcon iconLiteral="mdi-refresh" iconSize="16"/>
+                                    </graphic>
+                                    <tooltip>
+                                        <Tooltip text="Refresh TableView"/>
+                                    </tooltip>
                                 </Button>
                             </children>
                         </HBox>

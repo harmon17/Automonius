@@ -10,8 +10,8 @@ import javafx.beans.property.StringProperty;
 public class ArgEntry {
     private final int rowIndex;
     private final String stepId;
-    private final String name;
-    private final StringProperty value;
+    private final String name;          // argument name or header text
+    private final StringProperty value; // bound value
     private final boolean header;
     private final boolean global;
 
@@ -20,7 +20,7 @@ public class ArgEntry {
         this.rowIndex = rowIndex;
         this.stepId = stepId;
         this.name = name;
-        this.value = null;
+        this.value = null;   // lightweight: no dummy property
         this.header = true;
         this.global = false;
     }
@@ -49,7 +49,28 @@ public class ArgEntry {
     public int getRowIndex() { return rowIndex; }
     public String getStepId() { return stepId; }
     public String getName() { return name; }
+
+    // Alias for clarity (fixes "getArgName" calls)
+    public String getArgName() { return name; }
+
     public StringProperty valueProperty() { return value; }
     public boolean isHeader() { return header; }
-    public boolean isGlobal() { return global; }   // ✅ Added this
+    public boolean isGlobal() { return global; }
+
+    /**
+     * Returns the text to display in the ListView cell.
+     * This is used by the cell factory for consistent styling.
+     */
+    public String getDisplayText() {
+        if (isHeader()) {
+            return name; // header text only
+        }
+        return name + "=" + (value != null ? value.get() : "");
+    }
+
+    @Override
+    public String toString() {
+        // Fallback display if cell factory isn’t applied
+        return getDisplayText();
+    }
 }
